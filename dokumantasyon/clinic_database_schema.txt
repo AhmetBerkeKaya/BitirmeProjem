@@ -1,0 +1,293 @@
+1. DoctorStatisticsTest - Doktor İstatistikleri
+doktor_id: string
+fullName: string
+tcNo: string
+photo_url: string
+memnuniyet: number
+nobet_gun_sayisi: number
+toplam_ameliyat: number
+toplam_hasta: number
+toplam_mesai_saati: number
+Istatistikler: array
+ameliyat_sayisi: number
+hasta_sayisi: number
+mesai_saati: number
+nobet: boolean
+tarih: timestamp
+
+2. anamrezRecords - Hasta Anamnez Kayıtları
+clinicId: string
+patientId: string
+patientName: string
+patientTcNo: string
+patientBirthDate: string
+patientGender: string
+patientPhone: string
+patientAddress: string
+complaintDetails: string
+additionalNotes: string
+pastMedicalHistory: string
+surgicalHistory: string
+familyHistory: string
+socialHistory: string
+allergies: string
+medications: string
+physicalExamination: string
+systemsReview: map
+symptomRatings: map (40+ semptom)
+toxicityAssessment: map
+toxicityMapping: map
+toxicityScores: map
+additionalQuestions: map
+vitalSigns: map
+selectedDiagnosisSystems: array
+customQuestions: array
+completedBy: map
+selectedDoctor: map
+optionalScans: map
+createdAt: string
+updatedAt: string
+
+3. appointment_types - Randevu Tipleri
+name: string
+durationMinutes: number
+status: string
+createdAt: string
+updatedAt: string
+
+4. appointments - Randevu Kayıtları
+dateISO: string
+start: string
+durationMinutes: number
+patientId: string
+patientName: string
+patientPhone: string
+typeId: string
+typeName: string
+doctorId: null
+status: string
+isQuickReservation: boolean
+notes: string
+
+5. clinicUsers - Klinik Kullanıcıları
+clinicId: string
+email: string
+fullName: string
+phone: string
+role: string
+userType: string
+specialization: string
+isActive: boolean
+createdAt: string
+updatedAt: string
+
+6. clinics - Klinik Bilgileri
+adminId: string
+adminEmail: string
+name: string
+email: string
+phone: string
+address: string
+description: string
+isActive: boolean
+specialties: array
+createdAt: string
+updatedAt: string
+
+7. doctorMessages - Doktor Mesajları
+clinicId: string
+fromUserId: string
+fromUserName: string
+fromUserRole: string
+toUserId: string
+toDoctorName: string
+message: string
+messageType: string
+isRead: boolean
+readAt: string
+patientId: null
+patientName: null
+timestamp: timestamp
+createdAt: string
+
+8. doctorNotes - Doktor Notları
+clinicId: string
+doctorId: string
+title: string
+content: string
+category: string
+priority: string
+patientName: string
+isPrivate: boolean
+tags: array
+createdAt: string
+updatedAt: string
+
+9. doctors - Doktor Profilleri
+clinicId: string
+fullName: string
+email: string
+phone: string
+tcNo: string
+department: string
+specialization: string
+education: string
+experience: string
+hospital: string
+licenseNumber: string
+isClinicOwner: boolean
+userType: string
+createdAt: string
+updatedAt: string
+
+10. medicalApplications - Tıbbi Uygulamalar
+clinicId: string
+name: string
+description: string
+price: number
+createdBy: string
+createdAt: string
+updatedAt: string
+
+11. medicalDevices - Tıbbi Cihazlar
+clinicId: string
+name: string
+category: string
+deviceType: string
+manufacturer: string
+serialNumber: string
+description: string
+price: number
+stockQuantity: number
+minStockLevel: number
+lastMaintenanceDate: string
+nextMaintenanceDate: string
+maintenanceRequired: boolean
+createdBy: string
+createdAt: string
+updatedAt: string
+
+12. medications - İlaç Envanteri
+clinicId: string
+name: string
+category: string
+dosageForm: string
+manufacturer: string
+barcode: string
+description: string
+price: number
+stockQuantity: number
+minStockLevel: number
+expiryDate: string
+prescriptionRequired: boolean
+createdBy: string
+createdAt: string
+updatedAt: string
+
+13. pageVisitLogs - Sayfa Ziyaret Logları
+userId: string
+userEmail: string
+sessionId: string
+page: string
+pageTitle: string
+referrer: string
+duration: number
+timestamp: timestamp
+
+14. patientAssignments - Hasta Atamaları
+clinicId: string
+patientId: string
+patientName: string
+doctorId: string
+doctorName: string
+status: string
+assignedAt: string
+createdAt: string
+
+15. patients - Hasta Kayıtları
+clinicId: string
+fullName: string
+tcNo: string
+birthDate: string
+birthPlace: string
+gender: string
+email: string
+phone: string
+address: string
+fatherName: string
+emergencyPhone: string
+emergencyPhoneOwner: string
+registeredProvince: string
+registrationDate: string
+visitReason: string
+isAnamnezCompleted: boolean
+anamrezCompletedAt: string
+anamrezCompletedBy: string
+assignedDoctorId: string
+assignedDoctorName: string
+assignedAt: string
+status: string
+treatmentApplied: boolean
+treatmentNotAppliedReason: string
+treatmentNotes: string
+treatmentStartedAt: string
+paymentCompleted: boolean
+paymentAmount: number
+paymentMethod: string
+paymentDate: string
+indirim_check: boolean
+indirim_orani: string
+optionalScans: map
+treatmentOptions: map
+selectedMainApplications: array
+selectedProtocol: map
+treatmentSequence: array
+createdAt: string
+updatedAt: string
+
+16. roles - Rol ve İzin Yönetimi
+clinicId: string
+name: string
+displayName: string
+description: string
+isDefault: boolean
+permissions: array
+createdAt: string
+updatedAt: string
+
+17. sessionLogs - Oturum Logları
+userId: string
+userEmail: string
+sessionId: string
+loginTime: timestamp
+lastActivity: timestamp
+totalDuration: number
+totalPagesVisited: number
+
+18. treatmentProtocols - Tedavi Protokolleri
+clinicId: string
+name: string
+diagnosisSystem: string
+ageGroup: string
+conditionsLogic: string
+control: string
+frequency: string
+toxicityRequired: boolean
+priority: number
+phases: map
+symptomConditions: array
+createdBy: string
+createdAt: string
+updatedAt: string
+
+19. userLogs - Kullanıcı İşlem Logları
+userId: string
+userEmail: string
+userName: string
+userRole: string
+sessionId: string
+action: string
+details: map
+page: string
+userAgent: string
+timestamp: timestamp
