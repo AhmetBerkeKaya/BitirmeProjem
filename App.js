@@ -17,7 +17,7 @@ import AppointmentScreen from './screens/AppointmentScreen';
 import PrescriptionListScreen from './screens/PrescriptionListScreen';
 // Excel 11. madde için "Geçmiş Görüşmelerim" ekranı
 import PastAppointmentsScreen from './screens/PastAppointmentsScreen';
-
+import TreatmentListScreen from './screens/TreatmentListScreen';
 // Navigasyon Stack'ini oluştur
 const Stack = createNativeStackNavigator();
 
@@ -102,6 +102,12 @@ const AppStack = () => (
       name="PastAppointments" 
       component={PastAppointmentsScreen} 
       options={{ title: 'Geçmiş Randevular' }} 
+    />
+    {/* YENİ EKLENEN EKRAN */}
+    <Stack.Screen 
+      name="TreatmentList" 
+      component={TreatmentListScreen} 
+      options={{ title: 'Tedavilerim' }} 
     />
   </Stack.Navigator>
 );

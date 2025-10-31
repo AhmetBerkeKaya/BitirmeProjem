@@ -86,7 +86,7 @@ const DashboardScreen = ({ route, navigation }) => {
     fetchPatientName();
   }, [navigation, clinicId, clinicName]);
 
-  // --- Navigasyon Fonksiyonları (GÜNCELLENDİ) ---
+  // --- Navigasyon Fonksiyonları (YENİ FONKSİYON EKLENDİ) ---
 
   const go_RandevuAl = () => {
     navigation.navigate('DepartmentList', { 
@@ -95,20 +95,23 @@ const DashboardScreen = ({ route, navigation }) => {
     });
   };
 
-  // Madde 12
   const go_Recetelerim = () => {
-    // DÜZELTME: Artık clinicId'yi de gönderiyoruz
+    // Reçeteler de (eğer ilerde dinamik olursa) clinicId'ye ihtiyaç duyabilir
     navigation.navigate('PrescriptionList', {
-      clinicId: clinicId
+      clinicId: clinicId 
     }); 
   };
 
-  // Madde 11 (Geçmiş Görüşmelerim)
   const go_GecmisRandevular = () => {
-    // DÜZELTME: Artık clinicId'yi de gönderiyoruz
     navigation.navigate('PastAppointments', {
       clinicId: clinicId
     }); 
+  };
+  
+  // YENİ FONKSİYON: Tedavilerim ekranına git
+  const go_Tedavilerim = () => {
+    // Tedaviler direkt hastanın dokümanında olduğu için clinicId'ye gerek yok
+    navigation.navigate('TreatmentList'); 
   };
   
   const go_Doktorlarim = () => {
@@ -118,7 +121,7 @@ const DashboardScreen = ({ route, navigation }) => {
     });
   };
 
-  // --- RENDER (UI) (Aynı) ---
+  // --- RENDER (UI) (YENİ BUTON EKLENDİ) ---
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -144,6 +147,15 @@ const DashboardScreen = ({ route, navigation }) => {
         </TouchableOpacity>
         <View style={styles.menuContainer}>
           <Text style={styles.menuTitle}>Hızlı İşlemler</Text>
+          
+          {/* YENİ BUTON: Tedavilerim */}
+          <DashboardButton
+            title="Tedavilerim"
+            subtitle="Size özel tedavi protokolleri"
+            icon="clipboard-outline" // Uygun bir ikon
+            onPress={go_Tedavilerim}
+          />
+          
           <DashboardButton
             title="Reçetelerim"
             subtitle="Bu klinikteki reçeteleriniz"
@@ -168,7 +180,7 @@ const DashboardScreen = ({ route, navigation }) => {
   );
 };
 export default DashboardScreen;
-// --- Stiller (Aynı, kopyalamıyorum) ---
+// --- Stiller (Aynı) ---
 const styles = StyleSheet.create({
   centerContainer: {
     flex: 1,
