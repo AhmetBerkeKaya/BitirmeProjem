@@ -1,12 +1,11 @@
 import { initializeApp } from "firebase/app";
-import { 
-  initializeAuth, 
-  getReactNativePersistence 
-} from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import 'react-native-get-random-values'; // Crypto hatası almamak için
 
+// -----------------------------------------------------------------
+// UYARI: BURADAKİ BİLGİLERİ KENDİ FIREBASE PROJENİZDEN ALIN
+// -----------------------------------------------------------------
 // Firebase Proje Ayarları
 export const firebaseConfig = {
   apiKey: "AIzaSyBqkGT3pX0enKf7gBPY2VFSfxx447Qc3Cg",
@@ -18,30 +17,17 @@ export const firebaseConfig = {
   measurementId: "G-QGPPV9XXKW"
 };
 
+// --- UYGULAMA BAŞLATMA ---
+// Firebase uygulamasını başlat
+const app = initializeApp(firebaseConfig);
 
+// AsyncStorage ile uyumlu hale getir
+initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
-// Firebase'i başlat ve servisleri export et
-let app;
-let auth;
-let db;
+// Diğer dosyalarda kullanmak için 'db' ve 'auth'u export et
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-try {
-  // Uygulamayı başlat
-  app = initializeApp(firebaseConfig);
-  
-  // Auth'u (Kimlik Doğrulama) yerel depolama (AsyncStorage) ile başlat
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage)
-  });
-  
-  // Firestore (Veritabanı) servisini başlat
-  db = getFirestore(app);
-
-} catch (error) {
-  if (error.code !== 'auth/already-initialized') {
-    console.error("Firebase başlatma hatası:", error);
-  }
-}
-
-// Servisleri diğer dosyalarda kullanmak için export et
-export { app, auth, db };
+export default app;

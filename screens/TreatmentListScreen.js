@@ -8,20 +8,19 @@ import {
   ActivityIndicator // Yükleniyor göstergesi
 } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore'; // Tek doküman çekmek için
-import { db, auth } from '../firebaseConfig'; // Config dosyamız
+import { db, auth } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
 import { Ionicons } from '@expo/vector-icons'; // İkonlar
 
-// Renk paletimiz
+// --- YENİ RENK PALETİ ---
 const COLORS = {
-  primary: '#007bff',
-  lightGray: '#f8f9fa',
-  darkGray: '#6c757d',
-  white: '#ffffff',
-  text: '#343a40',
-  textLight: '#495057',
-  success: '#28a745',
-  warning: '#ffc107',
-  disabled: '#e9ecef', // Boş liste ikonu için
+  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
+  PRIMARY_LIGHT: '#E6F8F5', // Turkuaz'ın çok açık tonu
+  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
+  WHITE: '#FFFFFF',        // Kart Arkaplanı
+  TEXT: '#2C3E50',         // Koyu Metin Rengi
+  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
+  BORDER: '#EAECEE',      // Kenarlık Rengi
+  DANGER: '#e74c3c',      // Hata Rengi
 };
 
 /**
@@ -55,8 +54,21 @@ const TreatmentListScreen = ({ navigation }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: 'Tedavilerim' }); // Header başlığını ayarla
-
+    // Header başlığını ayarla (App.js'ten gelen global stile uyar)
+    navigation.setOptions({
+      title: protocolName || 'Tedavi Protokolüm',
+      headerStyle: {
+        backgroundColor: COLORS.PRIMARY, // Beyaz yerine PRIMARY renk
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: COLORS.WHITE, // Geri butonu beyaz
+      headerTitleStyle: {
+        fontWeight: '700',
+        fontSize: 18,
+        color: COLORS.WHITE,
+      },
+    });
     const fetchTreatment = async () => {
       setLoading(true);
       setError(null);
@@ -76,24 +88,24 @@ const TreatmentListScreen = ({ navigation }) => {
           const patientData = patientSnap.data();
 
           // 2. Hasta verisinden 'customizedProtocol' objesini al
-          //    (Veri yapısı karmaşık olduğu için ?. operatörü ile güvenli erişim yapalım)
           const protocol = patientData?.customizedProtocol; // Tüm protokol objesi
           const sequence = protocol?.treatmentSequence; // Protokol içindeki sequence dizisi
 
           // 3. 'treatmentSequence' geçerli bir dizi mi diye kontrol et
           if (protocol && Array.isArray(sequence)) {
-             // Sıralama: Dizi içindeki 'order' alanına göre küçükten büyüğe sırala
-             const sortedSequence = sequence.sort((a, b) => (a.order || 0) - (b.order || 0));
-             setTreatmentSequence(sortedSequence);
-             // Protokol adını da alalım (varsa)
-             setProtocolName(protocol.name || 'Özel Tedavi Protokolü');
+            // Sıralama: Dizi içindeki 'order' alanına göre küçükten büyüğe sırala
+            const sortedSequence = sequence.sort((a, b) => (a.order || 0) - (b.order || 0));
+            setTreatmentSequence(sortedSequence);
+            // Protokol adını da alalım (varsa)
+            setProtocolName(protocol.name || 'Özel Tedavi Protokolü');
           } else {
-             // Eğer protocol veya sequence yoksa veya dizi değilse, boş liste ata
-             console.log("Tedavi protokolü veya sequence bulunamadı/geçersiz:", protocol);
-             setTreatmentSequence([]);
-             setProtocolName('');
-             // Hata yerine bilgi mesajı gösterebiliriz
-             setError("Size atanmış bir tedavi protokolü bulunmuyor.");
+            // Eğer protocol veya sequence yoksa veya dizi değilse, boş liste ata
+            setTreatmentSequence([]);
+            setProtocolName('');
+            navigation.setOptions({
+              title: name,
+            }); 
+            setError("Size atanmış bir tedavi protokolü bulunmuyor.");
           }
         } else {
           setError("Hasta kaydı bulunamadı.");
@@ -103,7 +115,7 @@ const TreatmentListScreen = ({ navigation }) => {
       } catch (err) {
         console.error("Tedavi çekilirken hata:", err);
         setError("Tedaviler yüklenirken bir hata oluştu.");
-        setTreatmentSequence([]); // Hata durumunda listeyi boşalt
+        setTreatmentSequence([]);
         setProtocolName('');
       } finally {
         setLoading(false);
@@ -115,9 +127,11 @@ const TreatmentListScreen = ({ navigation }) => {
   // Liste boşken veya hata varken gösterilecek bileşen
   const renderEmptyList = () => (
     <View style={styles.centerContainer}>
-      <Ionicons name="clipboard-outline" size={80} color={COLORS.disabled} />
-      {/* Hata varsa hatayı, yoksa standart mesajı göster */}
-      <Text style={styles.infoText}>{error || "Size atanmış bir tedavi protokolü bulunmuyor."}</Text>
+      <Ionicons name="clipboard-outline" size={80} color={COLORS.BORDER} />
+      {/* Hata varsa hatayı (kırmızı), yoksa standart mesajı (gri) göster */}
+      <Text style={error && treatmentSequence.length === 0 ? styles.errorText : styles.infoText}>
+        {error || "Size atanmış bir tedavi protokolü bulunmuyor."}
+      </Text>
     </View>
   );
 
@@ -125,7 +139,7 @@ const TreatmentListScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
       </View>
     );
   }
@@ -134,7 +148,6 @@ const TreatmentListScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <FlatList
         data={treatmentSequence} // Firestore'dan çekilen (ve sıralanan) tedavi adımları
-        // Her adım için benzersiz bir anahtar (key) oluştur
         keyExtractor={(item, index) => item.id || `treatment-${index}-${item.order}`}
         renderItem={({ item, index }) => <TreatmentStepCard item={item} index={index} />}
         ListHeaderComponent={
@@ -150,20 +163,20 @@ const TreatmentListScreen = ({ navigation }) => {
 
 export default TreatmentListScreen;
 
-// --- Stiller ---
+// --- YENİ UI/UX STİLLERİ ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: COLORS.BACKGROUND,
   },
   listContainer: {
-    padding: 10,
+    padding: 15,
     flexGrow: 1, // Boş liste bileşeninin ortalanması için gerekli
   },
   mainHeader: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: COLORS.TEXT,
     paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: 15,
@@ -171,51 +184,50 @@ const styles = StyleSheet.create({
   },
   centerContainer: { // Yükleme ve Boş Liste için
     flex: 1,
-    paddingTop: 50, // Biraz aşağıda başlasın
+    paddingTop: 50,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   infoText: { // Boş liste mesajı
     fontSize: 16,
-    color: COLORS.darkGray,
-    marginTop: 10,
+    color: COLORS.TEXT_LIGHT,
+    marginTop: 15,
     textAlign: 'center'
   },
-  errorText: { // Hata mesajı (Boş listeyle aynı yerde görünebilir)
+  errorText: { // Hata mesajı
     fontSize: 16,
-    color: COLORS.danger,
-    marginTop: 10,
+    color: COLORS.DANGER,
+    marginTop: 15,
     textAlign: 'center'
   },
   card: { // Her bir tedavi adımı kartı
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 16,
     padding: 15,
     marginVertical: 8,
-    marginHorizontal: 5,
     flexDirection: 'row', // İkon ve metin yan yana
     alignItems: 'flex-start', // Üste hizala
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#95A5A6',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   stepIndicator: { // Sıra numarası çemberi
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.primary + '20', // Açık mavi arkaplan
+    backgroundColor: COLORS.PRIMARY_LIGHT, // Açık turkuaz arkaplan
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
-    marginTop: 5, // Metinle daha iyi hizalanması için
+    marginTop: 5,
   },
   stepNumber: { // Sıra numarası metni
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.primary,
+    color: COLORS.PRIMARY,
   },
   stepDetails: { // Tedavi adı, faz, dozaj alanı
     flex: 1, // Kalan tüm alanı kapla
@@ -223,24 +235,25 @@ const styles = StyleSheet.create({
   treatmentName: { // Tedavi adı metni
     fontSize: 17,
     fontWeight: '600',
-    color: COLORS.text,
+    color: COLORS.TEXT,
     marginBottom: 4,
   },
   phaseName: { // Faz adı metni
     fontSize: 14,
-    color: COLORS.primary, // Vurgulu renk
+    color: COLORS.PRIMARY, // Vurgulu renk
     fontWeight: '500',
     marginBottom: 4,
   },
   dosageText: { // Dozaj metni
     fontSize: 14,
-    color: COLORS.textLight,
+    color: COLORS.TEXT_LIGHT,
     marginBottom: 4,
   },
   descriptionText: { // Açıklama metni
     fontSize: 13,
-    color: COLORS.darkGray,
+    color: COLORS.TEXT_LIGHT,
     fontStyle: 'italic', // Eğik yazı
+    lineHeight: 18,
     marginTop: 5,
   },
 });

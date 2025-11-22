@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { StatusBar } from 'react-native';
+import { StatusBar, View } from 'react-native'; // <--- DİKKAT: 'View' buraya eklendi
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebaseConfig'; // Yeni config dosyamızdan import ediyoruz
+import { auth } from './firebaseConfig';
 
-// --- Ekranlar ---
-// Bu ekranları birazdan tek tek oluşturacağız, şimdilik import ediyoruz
+// --- CHATBOT BİLEŞENİNİ ÇAĞIRIYORUZ ---
+import ChatWidget from './components/ChatWidget'; 
+
+// --- YENİ RENK PALETİMİZ ---
+const COLORS = {
+  PRIMARY: '#00BFA6',     
+  BACKGROUND: '#F5F9FC', 
+  WHITE: '#FFFFFF',        
+  TEXT: '#2C3E50',         
+  TEXT_LIGHT: '#5D6D7E',  
+  BORDER: '#EAECEE',      
+};
+
+// --- EKRAN İMPORTLARI ---
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import ClinicListScreen from './screens/ClinicListScreen';
@@ -15,23 +27,31 @@ import DepartmentListScreen from './screens/DepartmentListScreen';
 import DoctorListScreen from './screens/DoctorListScreen';
 import AppointmentScreen from './screens/AppointmentScreen';
 import PrescriptionListScreen from './screens/PrescriptionListScreen';
-// Excel 11. madde için "Geçmiş Görüşmelerim" ekranı
 import PastAppointmentsScreen from './screens/PastAppointmentsScreen';
 import TreatmentListScreen from './screens/TreatmentListScreen';
-// Navigasyon Stack'ini oluştur
+
 const Stack = createNativeStackNavigator();
 
-// Renk paletimiz (Tüm uygulamada ortak)
-const COLORS = {
-  primary: '#007bff',
-  lightGray: '#f8f9fa',
-  white: '#ffffff',
-  text: '#343a40',
+const globalScreenOptions = {
+  headerStyle: {
+    backgroundColor: COLORS.WHITE,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  headerTitleStyle: {
+    color: COLORS.TEXT,
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  headerTintColor: COLORS.TEXT,
+  headerBackTitleVisible: false,
+  contentStyle: {
+    backgroundColor: COLORS.BACKGROUND,
+  },
 };
 
-// --- Ana Navigasyon Akışı ---
-
-// 1. Kullanıcı giriş yapmamışsa (Auth Stack)
 const AuthStack = () => (
   <Stack.Navigator>
     <Stack.Screen 
@@ -42,82 +62,28 @@ const AuthStack = () => (
     <Stack.Screen 
       name="SignUp" 
       component={SignUpScreen} 
-      options={{ 
-        title: 'Kayıt Ol',
-        headerStyle: { backgroundColor: COLORS.lightGray },
-        headerShadowVisible: false,
-        headerTintColor: COLORS.text,
-        headerBackTitleVisible: false
-      }}
+      options={{ headerShown: false }} 
     />
   </Stack.Navigator>
 );
 
-// 2. Kullanıcı giriş yapmışsa (App Stack)
 const AppStack = () => (
-  <Stack.Navigator
-    screenOptions={{
-      headerStyle: { backgroundColor: COLORS.white },
-      headerTintColor: COLORS.text,
-      headerShadowVisible: true,
-      headerBackTitleVisible: false
-    }}
-  >
-    {/* Stratejimiz:
-      1. ClinicList (Klinik seç)
-      2. Dashboard (Ana menü)
-      3. Diğer ekranlar...
-    */}
-    <Stack.Screen 
-      name="ClinicList" 
-      component={ClinicListScreen} 
-      options={{ title: 'Klinik Seçin' }} 
-    />
-    <Stack.Screen 
-      name="Dashboard" 
-      component={DashboardScreen} 
-      // Header başlığı DashboardScreen içinde ayarlanacak
-    />
-    <Stack.Screen 
-      name="DepartmentList" 
-      component={DepartmentListScreen} 
-      options={{ title: 'Branş Seçin' }} 
-    />
-    <Stack.Screen 
-      name="DoctorList" 
-      component={DoctorListScreen} 
-      // Başlık DoctorListScreen içinde ayarlanacak
-    />
-    <Stack.Screen 
-      name="Appointment" 
-      component={AppointmentScreen} 
-      options={{ title: 'Randevu Al' }} 
-    />
-    <Stack.Screen 
-      name="PrescriptionList" 
-      component={PrescriptionListScreen} 
-      options={{ title: 'Reçetelerim' }} 
-    />
-    <Stack.Screen 
-      name="PastAppointments" 
-      component={PastAppointmentsScreen} 
-      options={{ title: 'Geçmiş Randevular' }} 
-    />
-    {/* YENİ EKLENEN EKRAN */}
-    <Stack.Screen 
-      name="TreatmentList" 
-      component={TreatmentListScreen} 
-      options={{ title: 'Tedavilerim' }} 
-    />
+  <Stack.Navigator screenOptions={globalScreenOptions}>
+    <Stack.Screen name="ClinicList" component={ClinicListScreen} options={{ title: 'Klinik Seçin' }} />
+    <Stack.Screen name="Dashboard" component={DashboardScreen} />
+    <Stack.Screen name="DepartmentList" component={DepartmentListScreen} />
+    <Stack.Screen name="DoctorList" component={DoctorListScreen} />
+    <Stack.Screen name="Appointment" component={AppointmentScreen} options={{ title: 'Randevu Al' }} />
+    <Stack.Screen name="PrescriptionList" component={PrescriptionListScreen} options={{ title: 'Reçetelerim' }} />
+    <Stack.Screen name="PastAppointments" component={PastAppointmentsScreen} options={{ title: 'Randevularım' }} />
+    <Stack.Screen name="TreatmentList" component={TreatmentListScreen} options={{ title: 'Tedavilerim' }} />
   </Stack.Navigator>
 );
 
-// --- Ana Uygulama Bileşeni ---
 export default function App() {
-  const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
-  // Firebase Auth durumunu dinle
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -125,21 +91,28 @@ export default function App() {
         setInitializing(false);
       }
     });
-    return unsubscribe; // Component unmount olduğunda dinleyiciyi kaldır
+    return unsubscribe;
   }, []);
 
-  // Auth durumu kontrol edilirken boş ekran (veya yükleme) göster
   if (initializing) {
     return null;
   }
 
   return (
     <NavigationContainer>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.lightGray} />
-      {/* Kullanıcı varsa (user true ise) AppStack'i,
-        yoksa (user false ise) AuthStack'i göster.
-      */}
-      {user ? <AppStack /> : <AuthStack />}
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
+      
+      {user ? (
+        // --- DEĞİŞİKLİK BURADA ---
+        // Navigasyon ve Chatbot'u aynı kapsayıcı (View) içine alıyoruz.
+        // flex: 1 demezsek ekran boş görünür.
+        <View style={{ flex: 1 }}>
+           <AppStack />
+           <ChatWidget /> 
+        </View>
+      ) : (
+        <AuthStack />
+      )}
     </NavigationContainer>
   );
 }

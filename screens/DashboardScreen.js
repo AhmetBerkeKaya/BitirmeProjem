@@ -7,61 +7,124 @@ import {
   SafeAreaView,
   ScrollView,
   ActivityIndicator,
-  StatusBar 
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig'; 
-import { Ionicons } from '@expo/vector-icons'; 
+import { db, auth } from '../firebaseConfig';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// Renk paletimiz
+const { width } = Dimensions.get('window');
+
+// Geliştirilmiş Renk Paleti
 const COLORS = {
-  primary: '#007bff',
-  primaryDark: '#0056b3',
-  lightGray: '#f8f9fa',
-  darkGray: '#6c757d',
-  white: '#ffffff',
-  text: '#343a40',
-  textLight: '#495057'
+  PRIMARY: '#00BFA6',
+  PRIMARY_DARK: '#00A08E',
+  PRIMARY_LIGHT: '#E6F8F5',
+  ACCENT: '#4ECDC4',
+  BACKGROUND: '#F8FAFC',
+  CARD_BG: '#FFFFFF',
+  TEXT_PRIMARY: '#1E293B',
+  TEXT_SECONDARY: '#64748B',
+  TEXT_LIGHT: '#94A3B8',
+  BORDER: '#E2E8F0',
+  SUCCESS: '#10B981',
+  WARNING: '#F59E0B',
+  SHADOW: '#000000',
 };
 
 /**
- * Menü Butonları için Tekrar Kullanılabilir Bileşen
+ * Stat Card Component - İstatistik kartları için
  */
-const DashboardButton = ({ icon, title, subtitle, onPress }) => (
-  <TouchableOpacity style={styles.buttonCard} onPress={onPress}>
-    <View style={styles.buttonIconContainer}>
-      <Ionicons name={icon} size={30} color={COLORS.primary} />
+const StatCard = ({ icon, value, label, color }) => (
+  <View style={styles.statCard}>
+    <View style={[styles.statIconContainer, { backgroundColor: color + '15' }]}>
+      <Ionicons name={icon} size={24} color={color} />
     </View>
-    <View style={styles.buttonTextContainer}>
-      <Text style={styles.buttonTitle}>{title}</Text>
-      <Text style={styles.buttonSubtitle}>{subtitle}</Text>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </View>
+);
+
+/**
+ * Geliştirilmiş Dashboard Button Component
+ */
+const DashboardButton = ({ icon, title, subtitle, onPress, badge }) => (
+  <TouchableOpacity 
+    style={styles.card} 
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <View style={styles.cardContent}>
+      <View style={[styles.cardIconContainer, { backgroundColor: COLORS.PRIMARY_LIGHT }]}>
+        <Ionicons name={icon} size={26} color={COLORS.PRIMARY} />
+        {badge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.cardTextContainer}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardSubtitle}>{subtitle}</Text>
+      </View>
+      <View style={styles.cardArrow}>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.TEXT_LIGHT} />
+      </View>
     </View>
-    <Ionicons name="chevron-forward-outline" size={24} color={COLORS.darkGray} />
   </TouchableOpacity>
 );
 
+/**
+ * Quick Action Button - Hızlı erişim butonları
+ */
+const QuickActionButton = ({ icon, label, onPress, color }) => (
+  <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.quickActionIcon, { backgroundColor: color + '15' }]}>
+      <Ionicons name={icon} size={22} color={color} />
+    </View>
+    <Text style={styles.quickActionLabel}>{label}</Text>
+  </TouchableOpacity>
+);
 
 const DashboardScreen = ({ route, navigation }) => {
   const { clinicId, clinicName } = route.params;
   const [patientName, setPatientName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentHour, setCurrentHour] = useState(new Date().getHours());
 
-  /**
-   * Hastanın Adını Çek ve Header'ı Ayarla
-   */
+  // Günün zamanına göre selamlama
+  const getGreeting = () => {
+    if (currentHour < 12) return 'Günaydın';
+    if (currentHour < 18) return 'İyi günler';
+    return 'İyi akşamlar';
+  };
+
   useLayoutEffect(() => {
     navigation.setOptions({ 
-      title: clinicName, 
+      title: clinicName,
+      headerStyle: {
+        backgroundColor: COLORS.PRIMARY,
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: COLORS.CARD_BG,
+      headerTitleStyle: {
+        fontWeight: '700',
+        fontSize: 18,
+      },
       headerLeft: () => (
         <TouchableOpacity 
-          onPress={() => navigation.goBack()} 
+          onPress={() => navigation.goBack()}
           style={styles.headerButton}
+          activeOpacity={0.7}
         >
-          <Ionicons name="swap-horizontal-outline" size={24} color={COLORS.primary} />
+          <Ionicons name="swap-horizontal-outline" size={22} color={COLORS.CARD_BG} />
           <Text style={styles.headerButtonText}>Değiştir</Text>
         </TouchableOpacity>
       ),
-      headerBackVisible: false, 
+      headerBackVisible: false,
     });
 
     const fetchPatientName = async () => {
@@ -72,11 +135,14 @@ const DashboardScreen = ({ route, navigation }) => {
           const patientSnap = await getDoc(patientRef);
           
           if (patientSnap.exists()) {
-            setPatientName(patientSnap.data().fullName); 
+            const fullName = patientSnap.data().fullName;
+            const firstName = fullName.split(' ')[0];
+            setPatientName(firstName);
           } else {
             setPatientName("Değerli Hastamız");
           }
         } catch (err) {
+          console.error('Hasta bilgisi alınamadı:', err);
           setPatientName("Değerli Hastamız");
         }
       }
@@ -86,8 +152,7 @@ const DashboardScreen = ({ route, navigation }) => {
     fetchPatientName();
   }, [navigation, clinicId, clinicName]);
 
-  // --- Navigasyon Fonksiyonları (YENİ FONKSİYON EKLENDİ) ---
-
+  // Navigasyon fonksiyonları
   const go_RandevuAl = () => {
     navigation.navigate('DepartmentList', { 
       clinicId: clinicId, 
@@ -95,8 +160,11 @@ const DashboardScreen = ({ route, navigation }) => {
     });
   };
 
+  const go_Tedavilerim = () => {
+    navigation.navigate('TreatmentList'); 
+  };
+
   const go_Recetelerim = () => {
-    // Reçeteler de (eğer ilerde dinamik olursa) clinicId'ye ihtiyaç duyabilir
     navigation.navigate('PrescriptionList', {
       clinicId: clinicId 
     }); 
@@ -108,12 +176,6 @@ const DashboardScreen = ({ route, navigation }) => {
     }); 
   };
   
-  // YENİ FONKSİYON: Tedavilerim ekranına git
-  const go_Tedavilerim = () => {
-    // Tedaviler direkt hastanın dokümanında olduğu için clinicId'ye gerek yok
-    navigation.navigate('TreatmentList'); 
-  };
-  
   const go_Doktorlarim = () => {
     navigation.navigate('DoctorList', {
       clinicId: clinicId,
@@ -121,186 +183,358 @@ const DashboardScreen = ({ route, navigation }) => {
     });
   };
 
-  // --- RENDER (UI) (YENİ BUTON EKLENDİ) ---
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+        <Text style={styles.loadingText}>Yükleniyor...</Text>
       </View>
     );
   }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.lightGray} />
-      <ScrollView style={styles.container}>
-        <View style={styles.headerContainer}>
-          <Text style={styles.welcomeTitle}>Merhaba,</Text>
-          <Text style={styles.welcomeName}>{patientName}</Text>
-          <Text style={styles.welcomeClinic}>
-            <Ionicons name="location-sharp" size={16} color={COLORS.primary} />
-            {' '}{clinicName}
-          </Text>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
+      <ScrollView 
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
+        
+        {/* Hero Section - Gradient Background */}
+        <View style={styles.heroSection}>
+          <View style={styles.heroContent}>
+            <View style={styles.greetingContainer}>
+              <Text style={styles.greetingText}>{getGreeting()},</Text>
+              <Text style={styles.patientName}>{patientName}</Text>
+            </View>
+            
+            {/* Ana CTA Butonu */}
+            <TouchableOpacity 
+              style={styles.ctaButton} 
+              onPress={go_RandevuAl}
+              activeOpacity={0.9}
+            >
+              <View style={styles.ctaIconContainer}>
+                <Ionicons name="calendar" size={24} color={COLORS.PRIMARY} />
+              </View>
+              <View style={styles.ctaTextContainer}>
+                <Text style={styles.ctaButtonText}>Randevu Al</Text>
+                <Text style={styles.ctaButtonSubtext}>Hemen randevu oluştur</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={22} color={COLORS.PRIMARY} />
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity style={styles.ctaButton} onPress={go_RandevuAl}>
-          <Ionicons name="calendar" size={24} color={COLORS.white} />
-          <Text style={styles.ctaButtonText}>Hemen Randevu Al</Text>
-        </TouchableOpacity>
-        <View style={styles.menuContainer}>
-          <Text style={styles.menuTitle}>Hızlı İşlemler</Text>
+
+        {/* Quick Actions - Hızlı Erişim */}
+        <View style={styles.quickActionsContainer}>
+          <QuickActionButton
+            icon="calendar-outline"
+            label="Randevular"
+            color={COLORS.PRIMARY}
+            onPress={go_GecmisRandevular}
+          />
+          <QuickActionButton
+            icon="medical-outline"
+            label="Tedaviler"
+            color="#8B5CF6"
+            onPress={go_Tedavilerim}
+          />
+          <QuickActionButton
+            icon="document-text-outline"
+            label="Reçeteler"
+            color="#F59E0B"
+            onPress={go_Recetelerim}
+          />
+          <QuickActionButton
+            icon="people-outline"
+            label="Doktorlar"
+            color="#EF4444"
+            onPress={go_Doktorlarim}
+          />
+        </View>
+
+        {/* Ana Menü */}
+        <View style={styles.mainContent}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Sağlık Hizmetleri</Text>
+            <Text style={styles.sectionSubtitle}>Size özel işlemleriniz</Text>
+          </View>
           
-          {/* YENİ BUTON: Tedavilerim */}
           <DashboardButton
             title="Tedavilerim"
-            subtitle="Size özel tedavi protokolleri"
-            icon="clipboard-outline" // Uygun bir ikon
+            subtitle="Aktif tedavi ve protokolleriniz"
+            icon="medical"
             onPress={go_Tedavilerim}
           />
           
           <DashboardButton
             title="Reçetelerim"
-            subtitle="Bu klinikteki reçeteleriniz"
-            icon="document-text-outline"
+            subtitle="İlaç ve reçete bilgileriniz"
+            icon="document-text"
             onPress={go_Recetelerim}
           />
+          
           <DashboardButton
-            title="Geçmiş Randevularım"
-            subtitle="Bu klinikteki randevularınız"
-            icon="time-outline"
+            title="Randevu Geçmişi"
+            subtitle="Tüm randevu kayıtlarınız"
+            icon="time"
             onPress={go_GecmisRandevular}
           />
+
           <DashboardButton
             title="Klinik Doktorları"
-            subtitle="Tüm doktorları inceleyin"
-            icon="people-outline"
+            subtitle="Uzman doktorlarımızı inceleyin"
+            icon="people"
             onPress={go_Doktorlarim}
           />
         </View>
+
+        {/* Alt Boşluk */}
+        <View style={styles.bottomSpacer} />
+
       </ScrollView>
     </SafeAreaView>
   );
 };
+
 export default DashboardScreen;
-// --- Stiller (Aynı) ---
+
 const styles = StyleSheet.create({
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.lightGray,
-  },
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: COLORS.BACKGROUND,
   },
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.BACKGROUND,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '500',
+  },
+  
+  // Header Button
   headerButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 10,
-    paddingVertical: 5,
-    paddingRight: 10, 
+    marginLeft: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
   },
   headerButtonText: {
-    color: COLORS.primary,
-    fontSize: 16,
+    color: COLORS.CARD_BG,
+    fontSize: 15,
     fontWeight: '600',
-    marginLeft: 5,
+    marginLeft: 6,
   },
-  headerContainer: {
+  
+  // Hero Section
+  heroSection: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    shadowColor: COLORS.PRIMARY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  heroContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 25,
-    backgroundColor: COLORS.white,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
-  welcomeTitle: {
-    fontSize: 24,
-    color: COLORS.textLight,
+  greetingContainer: {
+    marginBottom: 24,
   },
-  welcomeName: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  greetingText: {
+    fontSize: 20,
+    color: COLORS.CARD_BG + 'CC',
+    fontWeight: '400',
+    marginBottom: 4,
   },
-  welcomeClinic: {
-    fontSize: 16,
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginTop: 8,
+  patientName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: COLORS.CARD_BG,
+    letterSpacing: 0.5,
   },
+  
+  // CTA Button
   ctaButton: {
     flexDirection: 'row',
-    backgroundColor: COLORS.primary,
-    marginHorizontal: 20,
-    marginTop: -15, 
+    backgroundColor: COLORS.CARD_BG,
     paddingVertical: 18,
-    paddingHorizontal: 25,
-    borderRadius: 15,
+    paddingHorizontal: 20,
+    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: COLORS.primary,
+    shadowColor: COLORS.SHADOW,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  ctaIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.PRIMARY_LIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  ctaTextContainer: {
+    flex: 1,
   },
   ctaButtonText: {
-    color: COLORS.white,
+    color: COLORS.TEXT_PRIMARY,
     fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    fontWeight: '700',
+    marginBottom: 2,
   },
-  menuContainer: {
-    paddingHorizontal: 20,
-    marginTop: 30,
+  ctaButtonSubtext: {
+    color: COLORS.TEXT_SECONDARY,
+    fontSize: 13,
+    fontWeight: '400',
   },
-  menuTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 10,
-  },
-  buttonCard: {
+  
+  // Quick Actions
+  quickActionsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    backgroundColor: COLORS.CARD_BG,
+    marginHorizontal: 16,
+    marginTop: -16,
+    borderRadius: 16,
+    shadowColor: COLORS.SHADOW,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  buttonIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#e6f2ff', 
+  quickAction: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  quickActionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginBottom: 8,
   },
-  buttonTextContainer: {
-    flex: 1, 
-  },
-  buttonTitle: {
-    fontSize: 17,
+  quickActionLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    color: COLORS.text,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
   },
-  buttonSubtitle: {
+  
+  // Main Content
+  mainContent: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  sectionHeader: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '400',
+  },
+  
+  // Card Component
+  card: {
+    backgroundColor: COLORS.CARD_BG,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: COLORS.SHADOW,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  cardIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: COLORS.CARD_BG,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cardTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: 4,
+  },
+  cardSubtitle: {
     fontSize: 13,
-    color: COLORS.textLight,
-    marginTop: 2,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '400',
+    lineHeight: 18,
+  },
+  cardArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.BACKGROUND,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  
+  // Bottom Spacer
+  bottomSpacer: {
+    height: 32,
   },
 });

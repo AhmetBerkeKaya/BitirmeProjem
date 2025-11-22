@@ -4,65 +4,69 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  FlatList, 
-  ActivityIndicator, 
+  FlatList, // Liste görünümü için
+  ActivityIndicator, // Yükleniyor
   TouchableOpacity
 } from 'react-native';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'; 
-import { db, auth } from '../firebaseConfig'; 
-import { Ionicons } from '@expo/vector-icons'; 
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'; // orderBy eklendi
+import { db, auth } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
+import { Ionicons } from '@expo/vector-icons'; // İkonlar
 
-// Renk paletimiz
+// --- YENİ RENK PALETİ ---
 const COLORS = {
-  primary: '#007bff',
-  lightGray: '#f8f9fa',
-  darkGray: '#6c757d',
-  white: '#ffffff',
-  text: '#343a40',
-  textLight: '#495057',
-  success: '#28a745', // Yeşil (Tamamlandı)
-  warning: '#ffc107', // Sarı (Beklemede)
-  danger: '#dc3545', // Kırmızı (İptal)
+  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
+  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
+  WHITE: '#FFFFFF',        // Kart Arkaplanı
+  TEXT: '#2C3E50',         // Koyu Metin Rengi
+  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
+  BORDER: '#EAECEE',      // Kenarlık Rengi
+  SUCCESS: '#27AE60',      // Yeşil (Tamamlandı)
+  WARNING: '#F39C12',      // Sarı (Beklemede)
+  DANGER: '#e74c3c',      // Kırmızı (İptal)
 };
 
-// Randevu durumuna göre ikon ve renk belirleyen yardımcı fonksiyon
+/**
+ * Randevu durumuna (status) göre ikon ve renk belirleyen yardımcı fonksiyon
+ */
 const getStatusStyle = (status) => {
   switch (status) {
-    case 'completed':
-      return { icon: 'checkmark-circle', color: COLORS.success };
-    case 'pending':
-      return { icon: 'time-outline', color: COLORS.warning };
-    case 'confirmed':
-      return { icon: 'calendar-outline', color: COLORS.primary };
-    case 'cancelled':
-      return { icon: 'close-circle', color: COLORS.danger };
+    case 'completed': // Tamamlandı
+      return { icon: 'checkmark-circle-outline', color: COLORS.SUCCESS };
+    case 'pending': // Beklemede
+      return { icon: 'time-outline', color: COLORS.WARNING };
+    case 'confirmed': // Onaylandı (Gelecek)
+      return { icon: 'calendar-outline', color: COLORS.PRIMARY };
+    case 'cancelled': // İptal
+      return { icon: 'close-circle-outline', color: COLORS.DANGER };
     default:
-      return { icon: 'help-circle-outline', color: COLORS.darkGray };
+      return { icon: 'help-circle-outline', color: COLORS.TEXT_LIGHT };
   }
 };
 
 
 /**
  * Her bir randevu kartını çizen bileşen
+ * (YENİ KART TASARIMI)
  */
 const AppointmentCard = ({ item }) => {
-  const statusStyle = getStatusStyle(item.status);
+  const statusStyle = getStatusStyle(item.status); // Duruma göre renk ve ikon al
 
   return (
     <View style={styles.card}>
       {/* Kart Başlığı: Doktor ve Tarih */}
       <View style={styles.cardHeader}>
-        <View style={[styles.iconContainer, { backgroundColor: `${statusStyle.color}20` }]}>
-          <Ionicons name={statusStyle.icon} size={24} color={statusStyle.color} />
+        {/* Durum ikonu (Renkli) */}
+        <View style={[styles.cardIconContainer, { backgroundColor: `${statusStyle.color}1A` }]}>
+          <Ionicons name={statusStyle.icon} size={28} color={statusStyle.color} />
         </View>
-        <View style={styles.headerText}>
-          <Text style={styles.doctorName}>{item.typeName}</Text>
-          <Text style={styles.departmentName}>Dr. {item.doctorName}</Text>
+        <View style={styles.cardTextContainer}>
+          <Text style={styles.cardTitle}>{item.typeName}</Text>
+          <Text style={styles.cardSubtitle}>Dr. {item.doctorName}</Text>
         </View>
         <Text style={styles.dateText}>{item.dateISO}</Text>
       </View>
-      
-      {/* Detaylar */}
+
+      {/* Detaylar: Saat ve Durum */}
       <View style={styles.detailsList}>
         <Text style={styles.detailItem}>
           <Text style={styles.detailTitle}>Saat: </Text>
@@ -81,21 +85,35 @@ const AppointmentCard = ({ item }) => {
 
 
 const PastAppointmentsScreen = ({ route, navigation }) => {
-  // DÜZELTME: Dashboard'dan gelen clinicId'yi al
-  const { clinicId } = route.params; 
+  // Dashboard'dan gelen clinicId'yi al (Mimari Düzeltmesi)
+  const { clinicId } = route.params;
 
-  const [allAppointments, setAllAppointments] = useState([]);
-  const [filteredAppointments, setFilteredAppointments] = useState([]);
+  const [allAppointments, setAllAppointments] = useState([]); // Tüm randevular (Geçmiş + Gelecek)
+  const [filteredAppointments, setFilteredAppointments] = useState([]); // Ekranda gösterilenler
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filterMode, setFilterMode] = useState('upcoming'); 
+
+  // Segment (Filtre) state'i: 'upcoming' (gelecek) veya 'past' (geçmiş)
+  const [filterMode, setFilterMode] = useState('upcoming');
 
   /**
-   * Header'a filtre butonlarını ekle
+   * Header'a (Başlık Çubuğuna) Filtre Butonlarını Ekle
    */
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: 'Randevularım',
+      headerStyle: {
+        backgroundColor: COLORS.PRIMARY, // Beyaz yerine PRIMARY renk
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: COLORS.WHITE, // Geri butonu beyaz
+      headerTitleStyle: {
+        fontWeight: '700',
+        fontSize: 18,
+        color: COLORS.WHITE,
+      },
+      // Filtre butonları için stil güncellemesi
       headerRight: () => (
         <View style={styles.segmentContainer}>
           <TouchableOpacity
@@ -116,7 +134,7 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
   }, [navigation, filterMode]);
 
   /**
-   * 1. Tüm Randevuları Çek (SORGUSU GÜNCELLENDİ)
+   * 1. Tüm Randevuları Çek (Sadece 1 Kez)
    */
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -128,7 +146,6 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
         setLoading(false);
         return;
       }
-      // DÜZELTME: clinicId de gelmiş mi diye kontrol et
       if (!clinicId) {
         setError("Klinik ID bilgisi bulunamadı.");
         setLoading(false);
@@ -136,28 +153,28 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
       }
 
       try {
+        // Strateji: 'appointments' (Kaynak 4) koleksiyonunu sorgula
         const apptRef = collection(db, 'appointments');
-        
-        // DÜZELTME: Sorguya 'where('clinicId', '==', clinicId)' eklendi
+
+        // (Mimari Düzeltmesi - İki filtre + Sıralama)
         const q = query(
           apptRef,
-          where('patientId', '==', user.uid), // 1. Sadece bu hasta
-          where('clinicId', '==', clinicId), // 2. Sadece bu klinikteki
-          orderBy('dateISO', 'desc') // 3. Tarihe göre sırala
+          where('clinicId', '==', clinicId), // 1. Sadece bu klinikteki
+          where('patientId', '==', user.uid), // 2. Sadece bu hasta
+          orderBy('dateISO', 'desc') // 3. Tarihe göre sırala (En yeni en üstte)
         );
 
         // !! ÇOK ÖNEMLİ UYARI !!
-        // Bu sorgu (patientId, clinicId, dateISO üzerinde)
+        // Bu sorgu (clinicId, patientId, dateISO üzerinde)
         // Firestore'da YENİ BİR BİRLEŞİK DİZİN (Composite Index) gerektirir.
         // Hata alırsanız, lütfen hata mesajındaki linke tıklayarak
-        // bu yeni dizini oluşturun!
-        // (Bir önceki dizin sadece patientId ve dateISO içindi)
+        // bu yeni dizini oluşturun! (clinicId ASC, patientId ASC, dateISO DESC)
 
         const querySnapshot = await getDocs(q);
         const apptList = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        setAllAppointments(apptList); 
-        
+
+        setAllAppointments(apptList); // Tüm randevuları depola
+
       } catch (err) {
         console.error("Randevular çekilirken hata:", err);
         setError("Randevular yüklenemedi. (Firestore Dizinlerini kontrol edin!)");
@@ -166,27 +183,31 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
       }
     };
     fetchAppointments();
-  }, [clinicId]); // Artık clinicId'ye de bağlı
+  }, [clinicId]); // Sadece clinicId değiştiğinde (ekran açıldığında) çalışır
 
   /**
-   * 2. Filtreleme Mantığı (Aynı)
+   * 2. Filtreleme Mantığı (Lokalde çalışır, hızlıdır)
+   * 'allAppointments' veya 'filterMode' değiştikçe çalışır
    */
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]; 
+    const today = new Date().toISOString().split('T')[0]; // Bugünün tarihi 'YYYY-MM-DD'
+
     if (filterMode === 'upcoming') {
+      // 'dateISO' bugünden büyük veya eşit olanlar
       const upcoming = allAppointments.filter(appt => appt.dateISO >= today);
       setFilteredAppointments(upcoming);
-    } else { 
+    } else { // 'past'
+      // 'dateISO' bugünden küçük olanlar
       const past = allAppointments.filter(appt => appt.dateISO < today);
       setFilteredAppointments(past);
     }
-  }, [filterMode, allAppointments]);
+  }, [filterMode, allAppointments]); // Filtre modu veya data değişince listeyi güncelle
 
 
   // Liste boşken gösterilecek bileşen
   const renderEmptyList = () => (
     <View style={styles.centerContainer}>
-      <Ionicons name="calendar-outline" size={80} color={COLORS.disabled} />
+      <Ionicons name="calendar-outline" size={80} color={COLORS.BORDER} />
       <Text style={styles.infoText}>
         {filterMode === 'upcoming' ? 'Bu klinikte gelecek randevunuz yok.' : 'Bu klinikte geçmiş randevunuz yok.'}
       </Text>
@@ -197,7 +218,7 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
       </View>
     );
   }
@@ -206,7 +227,7 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
   if (error) {
     return (
       <View style={styles.centerContainer}>
-        <Ionicons name="warning-outline" size={50} color={COLORS.danger} />
+        <Ionicons name="warning-outline" size={60} color={COLORS.DANGER} />
         <Text style={styles.errorText}>{error}</Text>
       </View>
     );
@@ -214,108 +235,110 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-        <FlatList
-          data={filteredAppointments} 
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => <AppointmentCard item={item} />}
-          ListEmptyComponent={renderEmptyList} 
-          contentContainerStyle={styles.listContainer}
-        />
+      <FlatList
+        data={filteredAppointments} // Sadece filtrelenmiş olanı göster
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => <AppointmentCard item={item} />}
+        ListEmptyComponent={renderEmptyList} // Liste boşsa bunu göster
+        contentContainerStyle={styles.listContainer}
+      />
     </SafeAreaView>
   );
 };
 
 export default PastAppointmentsScreen;
 
-// --- Stiller (Aynı, kopyalamıyorum) ---
+// --- YENİ UI/UX STİLLERİ ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: COLORS.BACKGROUND,
   },
   listContainer: {
-    padding: 10,
+    padding: 15,
+    flexGrow: 1, // Boş liste bileşeninin ortalanması için
   },
-  centerContainer: {
+  centerContainer: { // Yükleme, Hata ve Boş Liste için
     flex: 1,
-    paddingTop: 100, 
+    paddingTop: 50,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  infoText: {
+  infoText: { // Boş liste mesajı
     fontSize: 16,
-    color: COLORS.darkGray,
-    marginTop: 10,
+    color: COLORS.TEXT_LIGHT,
+    marginTop: 15,
     textAlign: 'center',
     paddingHorizontal: 20,
   },
-  errorText: {
+  errorText: { // Hata mesajı
     fontSize: 16,
-    color: COLORS.danger,
-    marginTop: 10,
+    color: COLORS.DANGER,
+    marginTop: 15,
     textAlign: 'center'
   },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
+  card: { // Randevu Kartı
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 16,
     padding: 15,
     marginVertical: 8,
-    marginHorizontal: 5,
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#95A5A6',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  iconContainer: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+  cardIconContainer: { // Durum İkonu Arkaplanı
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 15,
   },
-  headerText: {
-    flex: 1, 
+  cardTextContainer: {
+    flex: 1,
   },
-  doctorName: {
+  cardTitle: { // Randevu Tipi (örn: "İlk Muayene")
     fontSize: 17,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
   },
-  departmentName: {
+  cardSubtitle: { // Doktor Adı
     fontSize: 14,
-    color: COLORS.textLight,
+    color: COLORS.TEXT_LIGHT,
   },
-  dateText: {
+  dateText: { // Tarih
     fontSize: 13,
-    color: COLORS.textLight,
+    color: COLORS.TEXT_LIGHT,
     fontWeight: '500',
   },
-  detailsList: {
+  detailsList: { // Saat ve Durum alanı
     paddingTop: 10,
     marginTop: 10,
     borderTopWidth: 1,
-    borderTopColor: COLORS.lightGray,
+    borderTopColor: COLORS.BORDER,
   },
   detailItem: {
     fontSize: 14,
-    color: COLORS.textLight,
+    color: COLORS.TEXT_LIGHT,
     lineHeight: 20,
     marginLeft: 5,
   },
   detailTitle: {
     fontWeight: '600',
-    color: COLORS.text
+    color: COLORS.TEXT
   },
+
   // Header Filtre Stilleri
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: COLORS.disabled,
+    backgroundColor: COLORS.BORDER,
     borderRadius: 8,
     marginRight: 10,
   },
@@ -325,18 +348,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   segmentButtonActive: {
-    backgroundColor: COLORS.white,
-    elevation: 2,
+    backgroundColor: COLORS.WHITE,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   segmentText: {
-    color: COLORS.darkGray,
+    color: COLORS.TEXT_LIGHT,
     fontWeight: '600',
     fontSize: 14,
   },
   segmentTextActive: {
-    color: COLORS.primary,
+    color: COLORS.PRIMARY,
   }
 });

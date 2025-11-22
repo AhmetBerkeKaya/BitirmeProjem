@@ -10,22 +10,22 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  Alert
+  StatusBar
 } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore'; // Firestore'a yazmak için
-import { auth, db } from '../firebaseConfig'; // Hazırladığımız config'den 'auth' VE 'db'yi import et
+import { auth, db } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
 import { Ionicons } from '@expo/vector-icons';
 
-// Renk paletimiz
+// --- YENİ RENK PALETİ ---
 const COLORS = {
-  primary: '#007bff',
-  lightGray: '#f8f9fa',
-  darkGray: '#6c757d',
-  white: '#ffffff',
-  danger: '#dc3545',
-  text: '#343a40',
-  textLight: '#495057'
+  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
+  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
+  WHITE: '#FFFFFF',        // Kart Arkaplanı
+  TEXT: '#2C3E50',         // Koyu Metin Rengi
+  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
+  BORDER: '#EAECEE',      // Kenarlık Rengi
+  DANGER: '#e74c3c',      // Hata Rengi
 };
 
 const SignUpScreen = ({ navigation }) => {
@@ -92,6 +92,7 @@ const SignUpScreen = ({ navigation }) => {
         // Şema (Kaynak 15) için varsayılan değerler
         clinicId: null, // Henüz bir klinik seçmedi
         birthDate: "",
+        birthPlace: "",
         gender: "",
         address: "",
         status: "active",
@@ -106,9 +107,7 @@ const SignUpScreen = ({ navigation }) => {
       console.log('Firestore (patients) kaydı başarılı:', user.uid);
       
       // Başarılı kayıttan sonra App.js'teki onAuthStateChanged
-      // 'user' state'ini güncelleyeceği için navigasyon otomatik olarak
-      // AppStack'e (yani ClinicList'e) geçecek.
-      // Bizim burada navigation.navigate dememize GEREK YOK.
+      // navigasyonu otomatik olarak AppStack'e (ClinicList) geçirecek.
 
     } catch (err) {
       // Hata yönetimi
@@ -128,13 +127,19 @@ const SignUpScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
       >
+        {/* Geri Butonu */}
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back-outline" size={28} color={COLORS.TEXT} />
+        </TouchableOpacity>
+
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           
-          <Text style={styles.title}>Yeni Hasta Kaydı</Text>
+          <Text style={styles.title}>Yeni Hesap Oluştur</Text>
           <Text style={styles.subtitle}>Devam etmek için bilgilerinizi girin.</Text>
 
           {/* Hata Mesajı Alanı */}
@@ -142,11 +147,11 @@ const SignUpScreen = ({ navigation }) => {
 
           {/* Form Alanları */}
           <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="person-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Ad Soyad"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={fullName}
               onChangeText={setFullName}
               autoCapitalize="words"
@@ -154,11 +159,11 @@ const SignUpScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.inputContainer}>
-            <Ionicons name="card-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="card-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="TC Kimlik Numarası"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={tcNo}
               onChangeText={setTcNo}
               keyboardType="numeric"
@@ -167,11 +172,11 @@ const SignUpScreen = ({ navigation }) => {
           </View>
           
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="call-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Telefon (5xxxxxxxxx)"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
@@ -180,11 +185,11 @@ const SignUpScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="mail-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="E-posta Adresi"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -194,11 +199,11 @@ const SignUpScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Şifre (En az 6 karakter)"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -206,11 +211,11 @@ const SignUpScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.darkGray} style={styles.inputIcon} />
+            <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Şifre Tekrar"
-              placeholderTextColor={COLORS.darkGray}
+              placeholderTextColor={COLORS.TEXT_LIGHT}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -224,9 +229,9 @@ const SignUpScreen = ({ navigation }) => {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
+              <ActivityIndicator size="small" color={COLORS.WHITE} />
             ) : (
-              <Text style={styles.buttonText}>Kayıt Ol</Text>
+              <Text style={styles.buttonText}>Hesap Oluştur</Text>
             )}
           </TouchableOpacity>
 
@@ -244,35 +249,44 @@ const SignUpScreen = ({ navigation }) => {
   );
 };
 
-// --- Stiller ---
+// --- Stiller (LoginScreen ile çok benzer) ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.BACKGROUND,
   },
   container: {
     flex: 1,
+  },
+  // Geri butonu (Header'ı kapattığımız için manuel ekledik)
+  backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? 20 : 50, // Android/iOS uyumu
+    left: 20,
+    zIndex: 10,
+    padding: 5,
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 30, // Üst boşluk
+    padding: 25,
+    paddingTop: 80, // Geri butonunun altına
   },
   title: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: COLORS.TEXT,
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: COLORS.textLight,
+    color: COLORS.TEXT_LIGHT,
     marginBottom: 25,
+    textAlign: 'center',
   },
   errorText: {
-    color: COLORS.danger,
+    color: COLORS.DANGER,
     fontSize: 14,
     marginBottom: 15,
     textAlign: 'center',
@@ -281,11 +295,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    height: 50,
-    backgroundColor: COLORS.lightGray,
-    borderRadius: 10,
+    height: 55,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 12,
     marginBottom: 15,
     paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
   },
   inputIcon: {
     marginRight: 10,
@@ -294,36 +310,47 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     fontSize: 16,
-    color: COLORS.text,
+    color: COLORS.TEXT,
   },
   button: {
     width: '100%',
-    height: 50,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
+    height: 55,
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10, // Form ile buton arası boşluk
+    elevation: 3,
+    shadowColor: COLORS.PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
   buttonDisabled: {
-    backgroundColor: COLORS.darkGray,
+    backgroundColor: COLORS.TEXT_LIGHT,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   buttonText: {
-    color: COLORS.white,
+    color: COLORS.WHITE,
     fontSize: 18,
     fontWeight: 'bold',
   },
   loginContainer: {
     flexDirection: 'row',
-    marginTop: 25,
+    marginTop: 30,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER,
   },
   loginText: {
     fontSize: 15,
-    color: COLORS.darkGray,
+    color: COLORS.TEXT_LIGHT,
   },
   loginLink: {
-    color: COLORS.primary,
+    color: COLORS.PRIMARY,
     fontWeight: 'bold',
+    marginLeft: 5,
   },
 });
 
