@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { getFunctions } from "firebase/functions";
 // -----------------------------------------------------------------
 // UYARI: BURADAKİ BİLGİLERİ KENDİ FIREBASE PROJENİZDEN ALIN
 // -----------------------------------------------------------------
@@ -29,5 +29,6 @@ initializeAuth(app, {
 // Diğer dosyalarda kullanmak için 'db' ve 'auth'u export et
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const functions = getFunctions(app); // Bunu mutlaka ekle!
 
 export default app;
