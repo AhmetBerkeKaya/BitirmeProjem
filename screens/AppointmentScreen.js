@@ -123,7 +123,11 @@ const AppointmentScreen = ({ route, navigation }) => {
         }
 
         const typesCollection = collection(db, 'appointment_types');
-        const typesQuery = query(typesCollection, where('status', '==', 'active'));
+        
+        // 🔥 DÜZELTME BURADA: 'where' filtresini kaldırdık.
+        // Artık veritabanındaki tüm tipleri çekecek.
+        const typesQuery = query(typesCollection);
+        
         const typesSnapshot = await getDocs(typesQuery);
         const typesList = typesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         setAppointmentTypes(typesList);
@@ -218,7 +222,10 @@ const AppointmentScreen = ({ route, navigation }) => {
         dateISO: selectedDate,
         start: selectedTime,
         typeId: selectedType.id,
-        typeName: selectedType.typeName,
+        
+        // 🔥 DÜZELTME BURADA: .typeName yerine .name yazıyoruz
+        typeName: selectedType.name, // Veritabanında alanın adı 'name'
+        
         durationMinutes: selectedType.durationMinutes,
         status: 'pending',
         isQuickReservation: false,
@@ -244,7 +251,6 @@ const AppointmentScreen = ({ route, navigation }) => {
       setLoadingConfirm(false);
     }
   };
-
   // --- RENDER ---
 
   if (loadingInitial) {

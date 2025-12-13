@@ -153,31 +153,35 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
       }
 
       try {
-        // Strateji: 'appointments' (Kaynak 4) koleksiyonunu sorgula
         const apptRef = collection(db, 'appointments');
 
-        // (Mimari Düzeltmesi - İki filtre + Sıralama)
+        // 🔥 DÜZELTME 1: orderBy SORGUDAN ÇIKARILDI
         const q = query(
           apptRef,
-          where('clinicId', '==', clinicId), // 1. Sadece bu klinikteki
-          where('patientId', '==', user.uid), // 2. Sadece bu hasta
-          orderBy('dateISO', 'desc') // 3. Tarihe göre sırala (En yeni en üstte)
+          where('clinicId', '==', clinicId),
+          where('patientId', '==', user.uid)
+          // orderBy('dateISO', 'desc') <-- BU SATIRI SİLDİK
         );
 
-        // !! ÇOK ÖNEMLİ UYARI !!
-        // Bu sorgu (clinicId, patientId, dateISO üzerinde)
-        // Firestore'da YENİ BİR BİRLEŞİK DİZİN (Composite Index) gerektirir.
-        // Hata alırsanız, lütfen hata mesajındaki linke tıklayarak
-        // bu yeni dizini oluşturun! (clinicId ASC, patientId ASC, dateISO DESC)
-
         const querySnapshot = await getDocs(q);
-        const apptList = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // Veriyi önce çekiyoruz
+        let apptList = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        setAllAppointments(apptList); // Tüm randevuları depola
+        // 🔥 DÜZELTME 2: SIRALAMAYI BURADA YAPIYORUZ (JavaScript ile)
+        // Tarihe göre yeniden eskiye (Azalan) sıralama
+        apptList.sort((a, b) => {
+            // ISO tarih formatı (YYYY-MM-DD) string karşılaştırmasıyla düzgün sıralanır
+            if (b.dateISO < a.dateISO) return -1;
+            if (b.dateISO > a.dateISO) return 1;
+            return 0;
+        });
+
+        setAllAppointments(apptList);
 
       } catch (err) {
         console.error("Randevular çekilirken hata:", err);
-        setError("Randevular yüklenemedi. (Firestore Dizinlerini kontrol edin!)");
+        setError("Randevular yüklenemedi: " + err.message);
       } finally {
         setLoading(false);
       }

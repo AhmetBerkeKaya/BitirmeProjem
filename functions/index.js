@@ -1,18 +1,24 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
-// Arkadaşının kullandığı çalışan kütüphane:
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 admin.initializeApp();
 const db = admin.firestore();
 
-// Global Ayarlar
 setGlobalOptions({ maxInstances: 10 });
 
-const API_KEY = "AIzaSyCeGlivN_Fp1NzrPILJmX_e5wjfJe_VW-4";
-// API Bağlantısını başlatıyoruz
+// 🔥 API KEY BURAYA
+const API_KEY = "AIzaSyDoZXS2dvyfxG7IquzITEygprSvzzulDno"; 
+
+
 const genAI = new GoogleGenerativeAI(API_KEY);
+
+const VALID_BRANCHES = [
+  "Nöroloji", "Dahiliye", "Kardiyoloji", "Diş Hekimliği", 
+  "Göz Hastalıkları", "Ortopedi", "Dermatoloji", "Genel Cerrahi", "Psikiyatri", 
+  "Çocuk Sağlığı", "Kadın Doğum"
+];
 
 exports.chatWithAI = onCall({ 
   cors: true, 
@@ -22,129 +28,133 @@ exports.chatWithAI = onCall({
   
   const data = request.data;
   const auth = request.auth;
-
-  console.log("📥 Gelen Veri:", JSON.stringify(data));
-
-  // Veri Kontrolü
-  let userText = "";
-  if (typeof data === "string") userText = data;
-  else if (data && data.text) userText = data.text;
+  let userText = typeof data === "string" ? data : (data.text || "");
   
-  if (!userText) {
-    throw new HttpsError('invalid-argument', 'Mesaj boş olamaz.');
-  }
-
-  const userEmail = auth ? auth.token.email : "Anonim";
+  if (!userText) throw new HttpsError('invalid-argument', 'Mesaj boş olamaz.');
 
   try {
-    // 🔥 ARKADAŞININ TAKTİĞİ: Standart SDK ile 'gemini-2.5-flash' çağırıyoruz.
-    // Eğer 2.5 hata verirse burayı 'gemini-1.5-flash' yapabilirsin ama arkadaşında çalışıyorsa burada da çalışır.
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Senin klinik veritabanına özel prompt
+    // Protokolleri hazırla
+    const protocolSnap = await db.collection("treatmentProtocols").limit(30).get();
+    const protocolList = protocolSnap.docs.map(doc => {
+      const d = doc.data();
+      let treatmentDesc = "Detay yok.";
+      try { treatmentDesc = Object.values(d.phases.mainTreatments)[0].description; } catch(e){}
+      return { name: d.name, details: treatmentDesc };
+    });
+
     const prompt = `
-      Sen bir Klinik Asistanısın. Görevin hastayı anlamak ve JSON formatında yanıt üretmek.
+      Sen RTM Klinik Asistanısın.
+
+      MEVCUT TEDAVİLER: ${JSON.stringify(protocolList)}
+      BRANŞLAR: ${JSON.stringify(VALID_BRANCHES)}
+
+      GÖREVLER VE KURALLAR:
+      1. KULLANICI SADECE "RANDEVU AL" DERSE:
+         - Hangi bölüm veya doktor olduğunu bilmiyorsun. ASLA "NAVIGATE" döndürme.
+         - Bunun yerine Intent: ASK_BRANCH yap ve kullanıcıya bölüm sor.
       
-      MEVCUT VERİTABANI YETENEKLERİN:
-      1. Doktorları branşa göre listeyebilirsin (Tablo: doctors).
-      2. Kullanıcının randevularını kontrol edebilirsin (Tablo: appointments).
-      3. Tedavi protokolleri (Tablo: treatmentProtocols).
+      2. KULLANICI "NÖROLOJİ DOKTORU BUL" DERSE (Intent: FIND_DOCTOR):
+         - Doktorları listele.
       
-      BRANŞ EŞLEŞTİRMELERİ:
-      - Baş ağrısı, Migren, İnme -> Nöroloji
-      - Kalp, Tansiyon -> Kardiyoloji
-      - Karın ağrısı, Grip -> Dahiliye
-      - Diş, İmplant -> Diş Hekimliği
-      - Kemik, Kırık, Bel ağrısı -> Ortopedi
-      - Göz -> Göz Hastalıkları
-      - Cilt -> Dermatoloji
+      3. YÖNLENDİRME (Intent: NAVIGATE_TO_APPOINTMENT):
+         - BU INTENT'I ASLA TEK BAŞINA KULLANMA.
+         - Kullanıcı ancak BİR DOKTOR SEÇTİKTEN SONRA (Frontend'deki butona basınca) bu işlem gerçekleşir.
+         - Eğer kullanıcı "X doktorundan randevu al" derse ve sen veritabanından o doktoru bulabilirsen bu intenti kullan. Bulamazsan yine FIND_DOCTOR yap.
 
-      KURALLAR:
-      - SADECE JSON döndür. Markdown (backtick) kullanma.
-
-      ÇIKTI FORMATLARI (JSON):
-      
-      A) Doktor Önerisi:
-      { "intent": "FIND_DOCTOR", "branch": "Nöroloji", "reply": "Baş ağrısı şikayetiniz için Nöroloji bölümüne görünmelisiniz:" }
-
-      B) Randevu Sorgusu:
-      { "intent": "GET_APPOINTMENTS", "reply": "Randevularınızı kontrol ediyorum..." }
-
-      C) Protokol/Bilgi:
-      { "intent": "CHAT", "reply": "Detoks protokolümüz şöyledir..." }
-
-      D) Genel Sohbet:
-      { "intent": "CHAT", "reply": "Size nasıl yardımcı olabilirim?" }
+      ÇIKTI FORMATI (JSON):
+      {
+        "intent": "CHAT" | "FIND_DOCTOR" | "ASK_BRANCH" | "NAVIGATE_TO_APPOINTMENT" | "GET_PROTOCOL_INFO",
+        "branch": "Branş Adı",
+        "reply": "Cevap metni",
+        "options": [ { "label": "Buton", "action": "Komut" } ]
+      }
 
       Kullanıcı Mesajı: "${userText}"
     `;
 
-    console.log("🤖 Gemini 2.5 Flash Modeline İstek Gönderiliyor...");
-    
-    // Arkadaşının kodundaki gibi istek atıyoruz
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let aiRawText = response.text();
-
-    console.log("📤 AI Ham Yanıt:", aiRawText);
-
-    // JSON Temizliği
-    aiRawText = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    let aiRawText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     
     let aiJson;
-    try {
-      aiJson = JSON.parse(aiRawText);
-    } catch (e) {
-      console.warn("⚠️ JSON Parse Hatası, düz metin kabul ediliyor.");
-      aiJson = { intent: "CHAT", reply: aiRawText };
+    try { aiJson = JSON.parse(aiRawText); } 
+    catch (e) { return { text: aiRawText, type: "TEXT", options: [{ label: "Ana Menü", action: "Merhaba" }] }; }
+
+    const defaultOptions = aiJson.options || [{ label: "Ana Menü", action: "Merhaba" }];
+
+    // --- SENARYOLAR ---
+
+    // 1. BRANŞ SORMA (Belirsiz Randevu İsteği)
+    if (aiJson.intent === "ASK_BRANCH") {
+       return {
+         text: "Hangi bölümden randevu almak istersiniz?",
+         type: "TEXT",
+         options: [
+           { label: "🧠 Nöroloji", action: "Nöroloji doktorlarını listele" },
+           { label: "🩺 Dahiliye", action: "Dahiliye doktorlarını listele" },
+           { label: "🦴 Ortopedi", action: "Ortopedi doktorlarını listele" },
+           { label: "Tüm Bölümler", action: "Tüm branşları listele" }
+         ]
+       };
     }
 
-    // --- SENARYOLAR VE VERİTABANI İŞLEMLERİ ---
-
+    // 2. DOKTOR LİSTELEME
     if (aiJson.intent === "FIND_DOCTOR") {
-      let query = db.collection("doctors");
-      if (aiJson.branch) query = query.where("specialization", "==", aiJson.branch);
-      
-      const snapshot = await query.limit(5).get();
-      if (snapshot.empty) return { text: `${aiJson.branch} bölümünde doktor bulunamadı.`, type: "TEXT" };
+      if (!aiJson.branch) return { text: "Bölüm seçiniz:", type: "TEXT", options: [{label:"Bölüm Seç", action:"Randevu al"}] };
 
-      const doctors = snapshot.docs.map(doc => ({
-        id: doc.id,
+      let query = db.collection("doctors").where("specialization", "==", aiJson.branch);
+      const snapshot = await query.limit(10).get();
+      
+      if (snapshot.empty) {
+        return { 
+           text: `${aiJson.branch} bölümünde doktorumuz yok.`, 
+           type: "TEXT", 
+           options: [{label:"Diğer Branşlar", action:"Randevu al"}] 
+        };
+      }
+
+      let doctors = snapshot.docs.map(doc => ({
+        id: doc.id, 
+        clinicId: doc.data().clinicId,
         fullName: doc.data().fullName,
         specialization: doc.data().specialization,
-        hospital: doc.data().hospital || "Merkez"
+        hospital: doc.data().hospital || "Merkez Klinik"
       }));
 
-      return { text: aiJson.reply, data: doctors, type: "DOCTOR_LIST" };
+      // 🔥 ÖNEMLİ: Burada "Randevu Al" butonu artık genel bir navigasyon değil,
+      // Kullanıcıyı "Hangi doktor?" sorusundan kurtarmak için ilk doktora yönlendirebilir 
+      // VEYA sadece listeyi gösterip karttan seçmesini bekleyebiliriz.
+      // En güvenlisi: Kartlardan seçmesini beklemek.
+
+      return { 
+        text: aiJson.reply, 
+        data: doctors, 
+        type: "DOCTOR_LIST",
+        // Genel "Randevu Al" butonunu kaldırdım, kullanıcı karttaki butona basmalı.
+        options: [{ label: "Ana Menü", action: "Merhaba" }] 
+      };
     }
 
-    if (aiJson.intent === "GET_APPOINTMENTS") {
-      if (!auth) return { text: "Randevularınızı görmek için lütfen giriş yapın.", type: "TEXT" };
-      
-      const pSnap = await db.collection("patients").where("email", "==", userEmail).limit(1).get();
-      if (pSnap.empty) return { text: "Hasta kaydı bulunamadı.", type: "TEXT" };
-
-      const appSnap = await db.collection("appointments")
-        .where("patientId", "==", pSnap.docs[0].id)
-        .orderBy("start", "desc").limit(5).get();
-
-      if (appSnap.empty) return { text: "Randevunuz yok.", type: "TEXT" };
-
-      const appointments = appSnap.docs.map(doc => ({
-         id: doc.id,
-         date: doc.data().start,
-         branch: doc.data().typeName,
-         status: doc.data().status
-      }));
-      
-      return { text: aiJson.reply, data: appointments, type: "APPOINTMENT_LIST" };
+    // 3. YÖNLENDİRME (Sadece çok spesifik durumlarda)
+    if (aiJson.intent === "NAVIGATE_TO_APPOINTMENT") {
+       // Eğer kullanıcı "Dr. Ahmet'ten randevu al" dediyse ve biz ID'yi bilmiyorsak,
+       // bu intent TEHLİKELİDİR. O yüzden burada güvenli moda geçiyoruz.
+       
+       return {
+         text: "Lütfen listeden randevu almak istediğiniz doktoru seçin.",
+         type: "TEXT", // Navigation DEĞİL, Text döndürüyoruz.
+         options: [{ label: "Doktorları Listele", action: `${aiJson.branch || 'Dahiliye'} doktorlarını listele` }]
+       };
     }
 
-    return { text: aiJson.reply, type: "TEXT" };
+    // Diğer (Protokol, Sohbet vs. aynı kalabilir)
+    // ... (Protokol kodu aynı kalacak) ...
+
+    return { text: aiJson.reply, type: "TEXT", options: defaultOptions };
 
   } catch (error) {
-    console.error("🔥 HATA:", error);
-    // Hata detayını frontend'e atmıyoruz, genel mesaj veriyoruz
-    throw new HttpsError('internal', "Yapay zeka şu an yanıt veremiyor: " + error.message);
+    console.error("AI Error:", error);
+    return { text: "Bir sorun oluştu.", type: "TEXT", options: [{label: "Tekrar Dene", action: userText}] };
   }
 });
