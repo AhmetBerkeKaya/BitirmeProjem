@@ -6,16 +6,16 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebaseConfig';
 
 // --- CHATBOT BİLEŞENİNİ ÇAĞIRIYORUZ ---
-import ChatWidget from './components/ChatWidget'; 
+import ChatWidget from './components/ChatWidget';
 
 // --- YENİ RENK PALETİMİZ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',     
-  BACKGROUND: '#F5F9FC', 
-  WHITE: '#FFFFFF',        
-  TEXT: '#2C3E50',         
-  TEXT_LIGHT: '#5D6D7E',  
-  BORDER: '#EAECEE',      
+  PRIMARY: '#00BFA6',
+  BACKGROUND: '#F5F9FC',
+  WHITE: '#FFFFFF',
+  TEXT: '#2C3E50',
+  TEXT_LIGHT: '#5D6D7E',
+  BORDER: '#EAECEE',
 };
 
 // --- EKRAN İMPORTLARI ---
@@ -29,6 +29,7 @@ import AppointmentScreen from './screens/AppointmentScreen';
 import PrescriptionListScreen from './screens/PrescriptionListScreen';
 import PastAppointmentsScreen from './screens/PastAppointmentsScreen';
 import TreatmentListScreen from './screens/TreatmentListScreen';
+import AnamnesisScreen from './screens/AnamnesisScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -54,15 +55,15 @@ const globalScreenOptions = {
 
 const AuthStack = () => (
   <Stack.Navigator>
-    <Stack.Screen 
-      name="Login" 
-      component={LoginScreen} 
-      options={{ headerShown: false }} 
+    <Stack.Screen
+      name="Login"
+      component={LoginScreen}
+      options={{ headerShown: false }}
     />
-    <Stack.Screen 
-      name="SignUp" 
-      component={SignUpScreen} 
-      options={{ headerShown: false }} 
+    <Stack.Screen
+      name="SignUp"
+      component={SignUpScreen}
+      options={{ headerShown: false }}
     />
   </Stack.Navigator>
 );
@@ -77,6 +78,7 @@ const AppStack = () => (
     <Stack.Screen name="PrescriptionList" component={PrescriptionListScreen} options={{ title: 'Reçetelerim' }} />
     <Stack.Screen name="PastAppointments" component={PastAppointmentsScreen} options={{ title: 'Randevularım' }} />
     <Stack.Screen name="TreatmentList" component={TreatmentListScreen} options={{ title: 'Tedavilerim' }} />
+    <Stack.Screen name="AnamnesisScreen" component={AnamnesisScreen} options={{ headerShown: false }} />
   </Stack.Navigator>
 );
 
@@ -101,14 +103,14 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
-      
+
       {user ? (
         // --- DEĞİŞİKLİK BURADA ---
         // Navigasyon ve Chatbot'u aynı kapsayıcı (View) içine alıyoruz.
         // flex: 1 demezsek ekran boş görünür.
         <View style={{ flex: 1 }}>
-           <AppStack />
-           <ChatWidget /> 
+          <AppStack />
+          <ChatWidget />
         </View>
       ) : (
         <AuthStack />

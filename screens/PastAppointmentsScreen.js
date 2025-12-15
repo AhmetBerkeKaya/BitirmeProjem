@@ -1,18 +1,20 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  FlatList, // Liste görünümü için
-  ActivityIndicator, // Yükleniyor
-  TouchableOpacity
+  FlatList,
+  ActivityIndicator,
+  TouchableOpacity,
+  RefreshControl // Aşağı çekip yenileme için eklendi
 } from 'react-native';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'; // orderBy eklendi
-import { db, auth } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
-import { Ionicons } from '@expo/vector-icons'; // İkonlar
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useFocusEffect } from '@react-navigation/native'; // useFocusEffect eklendi
 
-// --- YENİ RENK PALETİ ---
+// --- RENK PALETİ ---
 const COLORS = {
   PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
   BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
@@ -43,19 +45,16 @@ const getStatusStyle = (status) => {
   }
 };
 
-
 /**
  * Her bir randevu kartını çizen bileşen
- * (YENİ KART TASARIMI)
  */
 const AppointmentCard = ({ item }) => {
-  const statusStyle = getStatusStyle(item.status); // Duruma göre renk ve ikon al
+  const statusStyle = getStatusStyle(item.status);
+  const navigation = useNavigation();
 
   return (
     <View style={styles.card}>
-      {/* Kart Başlığı: Doktor ve Tarih */}
       <View style={styles.cardHeader}>
-        {/* Durum ikonu (Renkli) */}
         <View style={[styles.cardIconContainer, { backgroundColor: `${statusStyle.color}1A` }]}>
           <Ionicons name={statusStyle.icon} size={28} color={statusStyle.color} />
         </View>
@@ -66,7 +65,6 @@ const AppointmentCard = ({ item }) => {
         <Text style={styles.dateText}>{item.dateISO}</Text>
       </View>
 
-      {/* Detaylar: Saat ve Durum */}
       <View style={styles.detailsList}>
         <Text style={styles.detailItem}>
           <Text style={styles.detailTitle}>Saat: </Text>
@@ -79,41 +77,61 @@ const AppointmentCard = ({ item }) => {
           </Text>
         </Text>
       </View>
+
+      {/* 🔥 ANAMNEZ BUTONU (Sadece Onaylı Randevular ve Anamnezi YOKSA) */}
+      {item.status === 'confirmed' && !item.hasAnamnesis && (
+        <TouchableOpacity 
+          style={styles.anamnesisButton}
+          onPress={() => navigation.navigate('AnamnesisScreen', {
+             appointmentId: item.id,
+             doctorName: item.doctorName,
+             clinicId: item.clinicId,
+             patientName: item.patientName,
+             patientPhone: item.patientPhone
+          })}
+        >
+          <Ionicons name="clipboard-outline" size={20} color="#FFF" style={{marginRight:8}} />
+          <Text style={styles.anamnesisButtonText}>Anamnez Formunu Doldur</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Form dolduysa bunu göster */}
+      {item.hasAnamnesis && (
+        <View style={styles.completedBadge}>
+           <Ionicons name="checkmark-circle" size={16} color={COLORS.SUCCESS} />
+           <Text style={styles.completedText}>Anamnez Formu Dolduruldu</Text>
+        </View>
+      )}
+
     </View>
   );
 };
 
-
 const PastAppointmentsScreen = ({ route, navigation }) => {
-  // Dashboard'dan gelen clinicId'yi al (Mimari Düzeltmesi)
   const { clinicId } = route.params;
 
-  const [allAppointments, setAllAppointments] = useState([]); // Tüm randevular (Geçmiş + Gelecek)
-  const [filteredAppointments, setFilteredAppointments] = useState([]); // Ekranda gösterilenler
+  const [allAppointments, setAllAppointments] = useState([]); // Tüm randevular
+  const [filteredAppointments, setFilteredAppointments] = useState([]); // Filtrelenmiş
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // Manuel yenileme state'i
   const [error, setError] = useState(null);
+  const [filterMode, setFilterMode] = useState('upcoming'); // 'upcoming' | 'past'
 
-  // Segment (Filtre) state'i: 'upcoming' (gelecek) veya 'past' (geçmiş)
-  const [filterMode, setFilterMode] = useState('upcoming');
-
-  /**
-   * Header'a (Başlık Çubuğuna) Filtre Butonlarını Ekle
-   */
+  // --- Header Ayarları ---
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: 'Randevularım',
       headerStyle: {
-        backgroundColor: COLORS.PRIMARY, // Beyaz yerine PRIMARY renk
+        backgroundColor: COLORS.PRIMARY,
         elevation: 0,
         shadowOpacity: 0,
       },
-      headerTintColor: COLORS.WHITE, // Geri butonu beyaz
+      headerTintColor: COLORS.WHITE,
       headerTitleStyle: {
         fontWeight: '700',
         fontSize: 18,
         color: COLORS.WHITE,
       },
-      // Filtre butonları için stil güncellemesi
       headerRight: () => (
         <View style={styles.segmentContainer}>
           <TouchableOpacity
@@ -133,79 +151,76 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
     });
   }, [navigation, filterMode]);
 
-  /**
-   * 1. Tüm Randevuları Çek (Sadece 1 Kez)
-   */
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      setLoading(true);
+  // --- VERİ ÇEKME FONKSİYONU ---
+  // useCallback içine aldık ki hem focus hem refresh ile çağrılabilsin
+  const fetchAppointments = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user || !clinicId) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+    }
+
+    try {
+      // Sadece hata varsa loading göster, refresh yaparken gösterme (RefreshControl kendi gösterir)
+      if (!refreshing) setLoading(true); 
       setError(null);
-      const user = auth.currentUser;
-      if (!user) {
-        setError("Kullanıcı bulunamadı.");
-        setLoading(false);
-        return;
-      }
-      if (!clinicId) {
-        setError("Klinik ID bilgisi bulunamadı.");
-        setLoading(false);
-        return;
-      }
 
-      try {
-        const apptRef = collection(db, 'appointments');
+      const apptRef = collection(db, 'appointments');
+      
+      // orderBy kaldırıldı (Index hatası olmaması için), JS ile sıralanacak
+      const q = query(
+        apptRef,
+        where('clinicId', '==', clinicId),
+        where('patientId', '==', user.uid)
+      );
 
-        // 🔥 DÜZELTME 1: orderBy SORGUDAN ÇIKARILDI
-        const q = query(
-          apptRef,
-          where('clinicId', '==', clinicId),
-          where('patientId', '==', user.uid)
-          // orderBy('dateISO', 'desc') <-- BU SATIRI SİLDİK
-        );
+      const querySnapshot = await getDocs(q);
+      let apptList = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        const querySnapshot = await getDocs(q);
-        
-        // Veriyi önce çekiyoruz
-        let apptList = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // JS tarafında Tarihe Göre Sıralama
+      apptList.sort((a, b) => {
+          if (b.dateISO < a.dateISO) return -1;
+          if (b.dateISO > a.dateISO) return 1;
+          return 0;
+      });
 
-        // 🔥 DÜZELTME 2: SIRALAMAYI BURADA YAPIYORUZ (JavaScript ile)
-        // Tarihe göre yeniden eskiye (Azalan) sıralama
-        apptList.sort((a, b) => {
-            // ISO tarih formatı (YYYY-MM-DD) string karşılaştırmasıyla düzgün sıralanır
-            if (b.dateISO < a.dateISO) return -1;
-            if (b.dateISO > a.dateISO) return 1;
-            return 0;
-        });
+      setAllAppointments(apptList);
 
-        setAllAppointments(apptList);
+    } catch (err) {
+      console.error("Randevular çekilirken hata:", err);
+      setError("Randevular yüklenemedi: " + err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [clinicId, refreshing]);
 
-      } catch (err) {
-        console.error("Randevular çekilirken hata:", err);
-        setError("Randevular yüklenemedi: " + err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // --- EKRAN ODAKLANDIĞINDA YENİLE (Otomatik Refresh) ---
+  useFocusEffect(
+    useCallback(() => {
+      fetchAppointments();
+    }, [fetchAppointments])
+  );
+
+  // --- MANUEL YENİLEME (Aşağı Çekince) ---
+  const onRefresh = () => {
+    setRefreshing(true);
     fetchAppointments();
-  }, [clinicId]); // Sadece clinicId değiştiğinde (ekran açıldığında) çalışır
+  };
 
-  /**
-   * 2. Filtreleme Mantığı (Lokalde çalışır, hızlıdır)
-   * 'allAppointments' veya 'filterMode' değiştikçe çalışır
-   */
-  useEffect(() => {
+  // --- FİLTRELEME MANTIĞI ---
+  React.useEffect(() => {
     const today = new Date().toISOString().split('T')[0]; // Bugünün tarihi 'YYYY-MM-DD'
 
     if (filterMode === 'upcoming') {
-      // 'dateISO' bugünden büyük veya eşit olanlar
       const upcoming = allAppointments.filter(appt => appt.dateISO >= today);
       setFilteredAppointments(upcoming);
-    } else { // 'past'
-      // 'dateISO' bugünden küçük olanlar
+    } else { 
       const past = allAppointments.filter(appt => appt.dateISO < today);
       setFilteredAppointments(past);
     }
-  }, [filterMode, allAppointments]); // Filtre modu veya data değişince listeyi güncelle
+  }, [filterMode, allAppointments]);
 
 
   // Liste boşken gösterilecek bileşen
@@ -218,8 +233,8 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
     </View>
   );
 
-  // Yükleniyor...
-  if (loading) {
+  // İlk yükleme
+  if (loading && !refreshing && allAppointments.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.PRIMARY} />
@@ -227,12 +242,15 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
     );
   }
 
-  // Hata...
+  // Hata durumu
   if (error) {
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="warning-outline" size={60} color={COLORS.DANGER} />
         <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchAppointments}>
+            <Text style={styles.retryText}>Tekrar Dene</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -240,11 +258,15 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <FlatList
-        data={filteredAppointments} // Sadece filtrelenmiş olanı göster
+        data={filteredAppointments}
         keyExtractor={item => item.id}
         renderItem={({ item }) => <AppointmentCard item={item} />}
-        ListEmptyComponent={renderEmptyList} // Liste boşsa bunu göster
+        ListEmptyComponent={renderEmptyList}
         contentContainerStyle={styles.listContainer}
+        // Aşağı çekip yenileme özelliği
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.PRIMARY]} />
+        }
       />
     </SafeAreaView>
   );
@@ -252,7 +274,7 @@ const PastAppointmentsScreen = ({ route, navigation }) => {
 
 export default PastAppointmentsScreen;
 
-// --- YENİ UI/UX STİLLERİ ---
+// --- STİLLER ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -260,29 +282,40 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 15,
-    flexGrow: 1, // Boş liste bileşeninin ortalanması için
+    flexGrow: 1,
   },
-  centerContainer: { // Yükleme, Hata ve Boş Liste için
+  centerContainer: {
     flex: 1,
     paddingTop: 50,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  infoText: { // Boş liste mesajı
+  infoText: {
     fontSize: 16,
     color: COLORS.TEXT_LIGHT,
     marginTop: 15,
     textAlign: 'center',
     paddingHorizontal: 20,
   },
-  errorText: { // Hata mesajı
+  errorText: {
     fontSize: 16,
     color: COLORS.DANGER,
     marginTop: 15,
     textAlign: 'center'
   },
-  card: { // Randevu Kartı
+  retryButton: {
+      marginTop: 20,
+      backgroundColor: COLORS.PRIMARY,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 8
+  },
+  retryText: {
+      color: COLORS.WHITE,
+      fontWeight: 'bold'
+  },
+  card: {
     backgroundColor: COLORS.WHITE,
     borderRadius: 16,
     padding: 15,
@@ -297,7 +330,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  cardIconContainer: { // Durum İkonu Arkaplanı
+  cardIconContainer: {
     width: 50,
     height: 50,
     borderRadius: 12,
@@ -308,21 +341,21 @@ const styles = StyleSheet.create({
   cardTextContainer: {
     flex: 1,
   },
-  cardTitle: { // Randevu Tipi (örn: "İlk Muayene")
+  cardTitle: {
     fontSize: 17,
     fontWeight: 'bold',
     color: COLORS.TEXT,
   },
-  cardSubtitle: { // Doktor Adı
+  cardSubtitle: {
     fontSize: 14,
     color: COLORS.TEXT_LIGHT,
   },
-  dateText: { // Tarih
+  dateText: {
     fontSize: 13,
     color: COLORS.TEXT_LIGHT,
     fontWeight: '500',
   },
-  detailsList: { // Saat ve Durum alanı
+  detailsList: {
     paddingTop: 10,
     marginTop: 10,
     borderTopWidth: 1,
@@ -365,5 +398,39 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: COLORS.PRIMARY,
+  },
+
+  // Anamnez Buton Stilleri
+  anamnesisButton: {
+    marginTop: 15,
+    backgroundColor: '#8E44AD', // Mor
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2
+  },
+  anamnesisButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14
+  },
+  completedBadge: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F8F5',
+    padding: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: COLORS.SUCCESS
+  },
+  completedText: {
+    color: COLORS.SUCCESS,
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6
   }
 });

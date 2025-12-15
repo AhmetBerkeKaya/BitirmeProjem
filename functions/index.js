@@ -6,155 +6,277 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 admin.initializeApp();
 const db = admin.firestore();
 
-setGlobalOptions({ maxInstances: 10 });
+// Timeout ve Region ayarları
+setGlobalOptions({ maxInstances: 10, timeoutSeconds: 60, region: "us-central1" });
 
-// 🔥 API KEY BURAYA
-const API_KEY = "AIzaSyDoZXS2dvyfxG7IquzITEygprSvzzulDno"; 
-
-
+const API_KEY = process.env.GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(API_KEY);
+
+// --- 🧠 AKILLI SÖZLÜK (Teknik Terim -> Halk Dili) ---
+// Veritabanındaki kodların hastaya nasıl görüneceğini buradan yönetirsin.
+const MEDICAL_DICTIONARY = {
+  // Tedaviler
+  "PROLOTEPARİ": "Proloterapi (Eklem ve Bağ Güçlendirme Tedavisi)",
+  "ENJEKTE OZON": "Ozon Tedavisi (Bağışıklık ve Hücre Yenileme)",
+  "HACAMAT": "Hacamat (Kupa Terapisi ile Toksin Atılımı)",
+  
+  // İlaçlar ve Takviyeler (Veritabanındaki kodlara göre)
+  "ARDZ - REM": "Remember (Hücresel Hafıza Destekleyici)",
+  "DVD-REG": "Regeneration 1 (Hücre Yenileme Desteği)",
+  "ISY-REG": "Regeneration 2 (Bağışıklık Dengeleyici)",
+  "DTX 19": "Detoks Takviyesi (Toksin Atıcı)",
+  "Beloc ZOK": "Kalp Ritmi Düzenleyici",
+  "Coraspin": "Kan Sulandırıcı (Pıhtılaşma Önleyici)",
+  "Parol": "Ağrı Kesici ve Ateş Düşürücü"
+};
 
 const VALID_BRANCHES = [
   "Nöroloji", "Dahiliye", "Kardiyoloji", "Diş Hekimliği", 
-  "Göz Hastalıkları", "Ortopedi", "Dermatoloji", "Genel Cerrahi", "Psikiyatri", 
-  "Çocuk Sağlığı", "Kadın Doğum"
+  "Göz Hastalıkları", "Ortopedi", "Dermatoloji", "Genel Cerrahi", 
+  "Psikiyatri", "Çocuk Sağlığı", "Kadın Doğum", "Fizik Tedavi"
 ];
 
-exports.chatWithAI = onCall({ 
-  cors: true, 
-  region: "us-central1",
-  timeoutSeconds: 60, 
-}, async (request) => {
-  
+// Yardımcı Fonksiyon: Terim Açıklayıcı
+const getFriendlyName = (term) => {
+  if (!term) return "Belirtilmemiş İşlem";
+  // Tam eşleşme var mı?
+  if (MEDICAL_DICTIONARY[term]) return MEDICAL_DICTIONARY[term];
+  // Kısmi eşleşme var mı? (Örn: "DTX 19 Şurup" içinde "DTX 19" geçiyor mu?)
+  const key = Object.keys(MEDICAL_DICTIONARY).find(k => term.includes(k));
+  return key ? MEDICAL_DICTIONARY[key] : term; // Bulamazsa orijinalini döndür
+};
+
+exports.chatWithAI = onCall({ cors: true }, async (request) => {
   const data = request.data;
   const auth = request.auth;
   let userText = typeof data === "string" ? data : (data.text || "");
-  
+
   if (!userText) throw new HttpsError('invalid-argument', 'Mesaj boş olamaz.');
+  
+  const userId = auth ? auth.uid : null;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // Protokolleri hazırla
-    const protocolSnap = await db.collection("treatmentProtocols").limit(30).get();
-    const protocolList = protocolSnap.docs.map(doc => {
-      const d = doc.data();
-      let treatmentDesc = "Detay yok.";
-      try { treatmentDesc = Object.values(d.phases.mainTreatments)[0].description; } catch(e){}
-      return { name: d.name, details: treatmentDesc };
-    });
-
+    // --- 1. INTENT ANALİZİ (Yapay Zeka Karar Mekanizması) ---
     const prompt = `
-      Sen RTM Klinik Asistanısın.
-
-      MEVCUT TEDAVİLER: ${JSON.stringify(protocolList)}
-      BRANŞLAR: ${JSON.stringify(VALID_BRANCHES)}
-
-      GÖREVLER VE KURALLAR:
-      1. KULLANICI SADECE "RANDEVU AL" DERSE:
-         - Hangi bölüm veya doktor olduğunu bilmiyorsun. ASLA "NAVIGATE" döndürme.
-         - Bunun yerine Intent: ASK_BRANCH yap ve kullanıcıya bölüm sor.
+      ROLE: Sen bir JSON API motorusun. Asla sohbet etme, sadece JSON döndür.
       
-      2. KULLANICI "NÖROLOJİ DOKTORU BUL" DERSE (Intent: FIND_DOCTOR):
-         - Doktorları listele.
-      
-      3. YÖNLENDİRME (Intent: NAVIGATE_TO_APPOINTMENT):
-         - BU INTENT'I ASLA TEK BAŞINA KULLANMA.
-         - Kullanıcı ancak BİR DOKTOR SEÇTİKTEN SONRA (Frontend'deki butona basınca) bu işlem gerçekleşir.
-         - Eğer kullanıcı "X doktorundan randevu al" derse ve sen veritabanından o doktoru bulabilirsen bu intenti kullan. Bulamazsan yine FIND_DOCTOR yap.
+      GÖREV: Kullanıcı mesajını analiz et ve en uygun INTENT'i belirle.
+
+      INTENT LİSTESİ:
+      1. "FIND_DOCTOR": Doktor arama, branş sorma. ("branch" parametresini doldur).
+      2. "GET_APPOINTMENTS": Randevuları sorma, ne zaman gelmeliyim?
+      3. "GET_MEDICATIONS": İlaçlar, reçeteler, eczane, takviyeler.
+      4. "GET_TREATMENT_PLAN": Tedavi planı, protokol, yapılacak işlemler.
+      5. "LIST_BRANCHES": Hangi bölümler var?
+      6. "NAVIGATE_TO_APPOINTMENT": Sadece "Randevu al" derse.
+      7. "CHAT": Selamlaşma veya genel sohbet.
 
       ÇIKTI FORMATI (JSON):
       {
-        "intent": "CHAT" | "FIND_DOCTOR" | "ASK_BRANCH" | "NAVIGATE_TO_APPOINTMENT" | "GET_PROTOCOL_INFO",
-        "branch": "Branş Adı",
-        "reply": "Cevap metni",
-        "options": [ { "label": "Buton", "action": "Komut" } ]
+        "intent": "INTENT_ADI",
+        "branch": "Branş Adı veya null",
+        "reply": "Kullanıcıya gösterilecek kısa, nazik Türkçe cevap"
       }
 
-      Kullanıcı Mesajı: "${userText}"
+      KULLANICI MESAJI: "${userText}"
     `;
 
     const result = await model.generateContent(prompt);
     let aiRawText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    
     let aiJson;
-    try { aiJson = JSON.parse(aiRawText); } 
-    catch (e) { return { text: aiRawText, type: "TEXT", options: [{ label: "Ana Menü", action: "Merhaba" }] }; }
+    try { aiJson = JSON.parse(aiRawText); } catch(e) { aiJson = { intent: "CHAT", reply: "Anlaşılamadı." }; }
 
-    const defaultOptions = aiJson.options || [{ label: "Ana Menü", action: "Merhaba" }];
+    // --- 2. VERİTABANI İŞLEMLERİ VE YANIT ÜRETME ---
 
-    // --- SENARYOLAR ---
+    // === İLAÇLARI / REÇETELERİ GETİR ===
+    if (aiJson.intent === "GET_MEDICATIONS") {
+        if (!userId) return { text: "Giriş yapmalısınız.", type: "TEXT", options: [] };
 
-    // 1. BRANŞ SORMA (Belirsiz Randevu İsteği)
-    if (aiJson.intent === "ASK_BRANCH") {
-       return {
-         text: "Hangi bölümden randevu almak istersiniz?",
-         type: "TEXT",
-         options: [
-           { label: "🧠 Nöroloji", action: "Nöroloji doktorlarını listele" },
-           { label: "🩺 Dahiliye", action: "Dahiliye doktorlarını listele" },
-           { label: "🦴 Ortopedi", action: "Ortopedi doktorlarını listele" },
-           { label: "Tüm Bölümler", action: "Tüm branşları listele" }
-         ]
-       };
-    }
+        const patientDoc = await db.collection("patients").doc(userId).get();
+        if (!patientDoc.exists) return { text: "Hasta kaydı bulunamadı.", type: "TEXT", options: [] };
 
-    // 2. DOKTOR LİSTELEME
-    if (aiJson.intent === "FIND_DOCTOR") {
-      if (!aiJson.branch) return { text: "Bölüm seçiniz:", type: "TEXT", options: [{label:"Bölüm Seç", action:"Randevu al"}] };
+        const pData = patientDoc.data();
+        const items = pData.pharmacySoldItems || [];
 
-      let query = db.collection("doctors").where("specialization", "==", aiJson.branch);
-      const snapshot = await query.limit(10).get();
-      
-      if (snapshot.empty) {
-        return { 
-           text: `${aiJson.branch} bölümünde doktorumuz yok.`, 
-           type: "TEXT", 
-           options: [{label:"Diğer Branşlar", action:"Randevu al"}] 
+        if (items.length === 0) {
+            return {
+                text: "Sistemde kayıtlı ilaç veya takviye satışınız görünmüyor.",
+                type: "TEXT",
+                options: [{ label: "Tedavilerim", action: "Tedavi planımı göster" }]
+            };
+        }
+
+        // Veriyi işle ve zenginleştir
+        const medications = items.map((item, index) => ({
+            id: index,
+            name: item.name, // Örn: ARDZ - REM
+            dosage: item.dosage, // Örn: 3X1 T
+            description: getFriendlyName(item.name), // Örn: Remember (Hücresel Hafıza...)
+            type: item.type || "İlaç/Takviye"
+        }));
+
+        return {
+            text: "Kullanmanız gereken ilaçlar ve takviyeler:",
+            type: "MEDICATION_LIST",
+            data: medications,
+            options: [{ label: "Tedavi Planım", action: "Tedavi planımı göster" }]
         };
-      }
-
-      let doctors = snapshot.docs.map(doc => ({
-        id: doc.id, 
-        clinicId: doc.data().clinicId,
-        fullName: doc.data().fullName,
-        specialization: doc.data().specialization,
-        hospital: doc.data().hospital || "Merkez Klinik"
-      }));
-
-      // 🔥 ÖNEMLİ: Burada "Randevu Al" butonu artık genel bir navigasyon değil,
-      // Kullanıcıyı "Hangi doktor?" sorusundan kurtarmak için ilk doktora yönlendirebilir 
-      // VEYA sadece listeyi gösterip karttan seçmesini bekleyebiliriz.
-      // En güvenlisi: Kartlardan seçmesini beklemek.
-
-      return { 
-        text: aiJson.reply, 
-        data: doctors, 
-        type: "DOCTOR_LIST",
-        // Genel "Randevu Al" butonunu kaldırdım, kullanıcı karttaki butona basmalı.
-        options: [{ label: "Ana Menü", action: "Merhaba" }] 
-      };
     }
 
-    // 3. YÖNLENDİRME (Sadece çok spesifik durumlarda)
+    // === TEDAVİ PLANINI GETİR ===
+    if (aiJson.intent === "GET_TREATMENT_PLAN") {
+        if (!userId) return { text: "Giriş yapmalısınız.", type: "TEXT", options: [] };
+
+        const patientDoc = await db.collection("patients").doc(userId).get();
+        if (!patientDoc.exists) return { text: "Hasta kaydı bulunamadı.", type: "TEXT", options: [] };
+
+        const pData = patientDoc.data();
+        // Veritabanındaki yapıya göre öncelik: selectedProtocol > customizedProtocol
+        const protocol = pData.selectedProtocol || pData.customizedProtocol;
+
+        if (!protocol || !protocol.treatmentSequence || protocol.treatmentSequence.length === 0) {
+            return {
+                text: "Henüz size atanmış aktif bir tedavi protokolü bulunmuyor.",
+                type: "TEXT",
+                options: [{ label: "Randevu Al", action: "Randevu al" }]
+            };
+        }
+
+        // Tedavileri işle ve zenginleştir
+        const treatments = protocol.treatmentSequence
+            .sort((a, b) => (a.order || 0) - (b.order || 0)) // Sıraya diz
+            .map((item, index) => ({
+                id: index,
+                name: item.treatment, // Örn: PROLOTEPARİ
+                phase: item.phase, // Örn: Main Treatment
+                description: getFriendlyName(item.treatment) || item.description // Sözlükten açıklama
+            }));
+
+        return {
+            text: `Mevcut Protokolünüz: ${protocol.name || 'Kişisel Tedavi Planı'}`,
+            type: "TREATMENT_LIST",
+            data: treatments,
+            options: [{ label: "İlaçlarım", action: "İlaçlarımı göster" }]
+        };
+    }
+
+    // === RANDEVULARI GETİR (Global Arama - Index Hatasız) ===
+    if (aiJson.intent === "GET_APPOINTMENTS") {
+        if (!userId) return { text: "Giriş yapmalısınız.", type: "TEXT", options: [] };
+        
+        // orderBy kullanmıyoruz, index hatasını önlemek için JS ile sıralayacağız.
+        const apptSnapshot = await db.collection("appointments").where("patientId", "==", userId).get();
+        
+        if (apptSnapshot.empty) {
+            return { 
+                text: "Sistemde kayıtlı randevunuz bulunmuyor.", 
+                type: "TEXT", 
+                options: [{label:"Randevu Al", action:"Randevu al"}] 
+            };
+        }
+
+        let rawData = apptSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // JS ile Tarihe Göre Sıralama (Yeniden Eskiye)
+        rawData.sort((a, b) => new Date(b.dateISO) - new Date(a.dateISO));
+        // İlk 5 tanesini al
+        rawData = rawData.slice(0, 5);
+
+        // Klinik isimlerini çek (Promise.all ile hızlıca)
+        const appointments = await Promise.all(rawData.map(async (d) => {
+            let clinicName = "Merkez Klinik";
+            if (d.clinicId) {
+                try {
+                    const cDoc = await db.collection("clinics").doc(d.clinicId).get();
+                    if (cDoc.exists) clinicName = cDoc.data().name || "Merkez Klinik";
+                } catch(e){}
+            }
+            return {
+                id: d.id,
+                date: `${d.dateISO} ${d.start || ''}`,
+                branch: d.typeName || d.department || "Genel",
+                doctor: d.doctorName || "Belirtilmemiş",
+                clinic: clinicName,
+                status: d.status
+            };
+        }));
+
+        return {
+            text: "Randevularınız:",
+            type: "APPOINTMENT_LIST",
+            data: appointments,
+            options: [{ label: "Ana Menü", action: "Merhaba" }]
+        };
+    }
+
+    // === DOKTOR BULMA ===
+    if (aiJson.intent === "FIND_DOCTOR") {
+        if (!aiJson.branch || aiJson.branch.toLowerCase().includes("tüm")) {
+            return {
+                text: "Hangi bölümden doktor arıyorsunuz?",
+                type: "TEXT",
+                options: VALID_BRANCHES.slice(0, 4).map(b => ({ label: b, action: b }))
+            };
+        }
+
+        const dSnapshot = await db.collection("doctors").where("specialization", "==", aiJson.branch).limit(10).get();
+        if (dSnapshot.empty) return { text: `${aiJson.branch} bölümünde doktor bulamadım.`, type: "TEXT", options: [] };
+
+        const doctors = await Promise.all(dSnapshot.docs.map(async (doc) => {
+            const d = doc.data();
+            let cName = "Merkez Klinik";
+            if(d.clinicId) {
+                try { const c = await db.collection("clinics").doc(d.clinicId).get(); if(c.exists) cName = c.data().name; } catch(e){}
+            }
+            return {
+                id: doc.id,
+                fullName: d.fullName,
+                specialization: d.specialization,
+                clinicId: d.clinicId,
+                hospital: cName
+            };
+        }));
+
+        return {
+            text: `${aiJson.branch} doktorları:`,
+            type: "DOCTOR_LIST",
+            data: doctors,
+            options: [{ label: "Randevu Al", action: "Randevu al" }]
+        };
+    }
+
+    // === BRANŞ LİSTELEME ===
+    if (aiJson.intent === "LIST_BRANCHES") {
+        return {
+            text: "Hizmet verdiğimiz bölümler:",
+            type: "TEXT",
+            options: VALID_BRANCHES.slice(0, 6).map(b => ({ label: b, action: `${b} doktorları` }))
+        };
+    }
+
+    // === GENEL NAVİGASYON ===
     if (aiJson.intent === "NAVIGATE_TO_APPOINTMENT") {
-       // Eğer kullanıcı "Dr. Ahmet'ten randevu al" dediyse ve biz ID'yi bilmiyorsak,
-       // bu intent TEHLİKELİDİR. O yüzden burada güvenli moda geçiyoruz.
-       
        return {
-         text: "Lütfen listeden randevu almak istediğiniz doktoru seçin.",
-         type: "TEXT", // Navigation DEĞİL, Text döndürüyoruz.
-         options: [{ label: "Doktorları Listele", action: `${aiJson.branch || 'Dahiliye'} doktorlarını listele` }]
+         text: "Lütfen bir bölüm seçiniz:",
+         type: "TEXT",
+         options: [{label:"Dahiliye", action:"Dahiliye"}, {label:"Nöroloji", action:"Nöroloji"}]
        };
     }
 
-    // Diğer (Protokol, Sohbet vs. aynı kalabilir)
-    // ... (Protokol kodu aynı kalacak) ...
-
-    return { text: aiJson.reply, type: "TEXT", options: defaultOptions };
+    // === VARSAYILAN SOHBET ===
+    return {
+        text: aiJson.reply,
+        type: "TEXT",
+        options: [
+            { label: "💊 İlaçlarım", action: "İlaçlarımı göster" },
+            { label: "📋 Tedavilerim", action: "Tedavi planımı göster" },
+            { label: "📅 Randevularım", action: "Randevularımı getir" }
+        ]
+    };
 
   } catch (error) {
     console.error("AI Error:", error);
-    return { text: "Bir sorun oluştu.", type: "TEXT", options: [{label: "Tekrar Dene", action: userText}] };
+    return { text: "Bir hata oluştu, lütfen tekrar deneyin.", type: "TEXT", options: [] };
   }
 });

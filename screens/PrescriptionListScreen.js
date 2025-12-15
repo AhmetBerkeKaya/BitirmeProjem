@@ -1,142 +1,140 @@
-import React, { useLayoutEffect } from 'react'; // useLayoutEffect ekleyin
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  FlatList, // Liste görünümü için
-  TouchableOpacity,
+  FlatList,
+  ActivityIndicator
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // İkonlar
+import { doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig';
+import { Ionicons } from '@expo/vector-icons';
 
-// --- YENİ RENK PALETİ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
-  PRIMARY_LIGHT: '#E6F8F5', // Turkuaz'ın çok açık tonu
-  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
-  WHITE: '#FFFFFF',        // Kart Arkaplanı
-  TEXT: '#2C3E50',         // Koyu Metin Rengi
-  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
-  BORDER: '#EAECEE',      // Kenarlık Rengi
+  PRIMARY: '#00BFA6',
+  PRIMARY_LIGHT: '#E6F8F5',
+  BACKGROUND: '#F5F9FC',
+  WHITE: '#FFFFFF',
+  TEXT: '#2C3E50',
+  TEXT_LIGHT: '#5D6D7E',
+  BORDER: '#EAECEE',
 };
 
-// --- ŞİMDİLİK STATİK VERİ (Madde 12'ye göre) ---
-// (Mimaride 'prescriptions' koleksiyonu tanımlanmadığı için statik)
-const DUMMY_PRESCRIPTIONS = [
-  {
-    id: 'recete123',
-    doctorName: 'Dr. Elif Yılmaz',
-    department: 'Kardiyoloji',
-    date: '2025-10-20',
-    clinicName: 'RTM Sağlık',
-    drugs: [
-      { id: 'd1', name: 'Beloc ZOK', dosage: 'Günde 1 kez' },
-      { id: 'd2', name: 'Coraspin 100mg', dosage: 'Günde 1 kez (Tok)' },
-    ],
-  },
-  {
-    id: 'recete456',
-    doctorName: 'Dr. Ahmet Öztürk',
-    department: 'Dahiliye',
-    date: '2025-09-15',
-    clinicName: 'RTM Sağlık',
-    drugs: [
-      { id: 'd3', name: 'Parol 500mg', dosage: 'Günde 3 kez (Ağrı oldukça)' },
-    ],
-  },
-  {
-    id: 'recete789',
-    doctorName: 'Dr. Zeynep Kaya',
-    department: 'Göz Hastalıkları',
-    date: '2025-08-01',
-    clinicName: 'Merkez Klinik',
-    drugs: [
-      { id: 'd4', name: 'Refresh Göz Damlası', dosage: 'Günde 4 kez' },
-    ],
-  },
-];
-// --- Statik Veri Sonu ---
-
-
-/**
- * Her bir reçete kartını çizen bileşen
- * (YENİ KART TASARIMI)
- */
-const PrescriptionCard = ({ item, onPress }) => (
-  <TouchableOpacity style={styles.card} onPress={onPress}>
-    {/* Kart Başlığı: Doktor ve Tarih (Madde 12) */}
+// Kart Bileşeni
+const PharmacySaleCard = ({ saleDate, items, doctorName }) => (
+  <View style={styles.card}>
+    {/* Kart Başlığı */}
     <View style={styles.cardHeader}>
-      <View style={[styles.cardIconContainer, { backgroundColor: COLORS.PRIMARY_LIGHT }]}>
-        <Ionicons name="document-text-outline" size={28} color={COLORS.PRIMARY} />
+      <View style={styles.cardIconContainer}>
+        <Ionicons name="medkit-outline" size={24} color={COLORS.PRIMARY} />
       </View>
       <View style={styles.cardTextContainer}>
-        {/* Madde 12: Hangi doktor tarafından */}
-        <Text style={styles.cardTitle}>{item.doctorName}</Text>
-        <Text style={styles.cardSubtitle}>{item.department}</Text>
+        <Text style={styles.cardTitle}>Eczane / İlaç Satışı</Text>
+        <Text style={styles.cardSubtitle}>Dr. {doctorName}</Text>
       </View>
-      {/* Madde 12: Hangi tarihte */}
-      <Text style={styles.dateText}>{item.date}</Text>
+      <Text style={styles.dateText}>{saleDate}</Text>
     </View>
 
     {/* İlaç Listesi */}
     <View style={styles.drugList}>
-      <Text style={styles.drugListTitle}>İlaçlar:</Text>
-      {item.drugs.map(drug => (
-        <Text key={drug.id} style={styles.drugItem}>• {drug.name} ({drug.dosage})</Text>
+      <Text style={styles.drugListTitle}>Verilen İlaçlar:</Text>
+      {items.map((drug, index) => (
+        <View key={index} style={styles.drugRow}>
+          <Ionicons name="ellipse" size={6} color={COLORS.PRIMARY} style={{marginTop:6, marginRight:6}} />
+          <View>
+             <Text style={styles.drugName}>{drug.name}</Text>
+             <Text style={styles.drugDosage}>Dozaj: {drug.dosage} {drug.type ? `(${drug.type})` : ''}</Text>
+          </View>
+        </View>
       ))}
     </View>
-  </TouchableOpacity>
+  </View>
 );
 
-
 const PrescriptionListScreen = ({ navigation }) => {
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Header stilini ayarlamak için useLayoutEffect ekleyin:
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: 'Reçetelerim',
-      headerStyle: {
-        backgroundColor: COLORS.PRIMARY, // Beyaz yerine PRIMARY renk
-        elevation: 0,
-        shadowOpacity: 0,
-      },
-      headerTintColor: COLORS.WHITE, // Geri butonu beyaz
-      headerTitleStyle: {
-        fontWeight: '700',
-        fontSize: 18,
-        color: COLORS.WHITE,
-      },
+      title: 'İlaçlarım & Reçeteler',
+      headerStyle: { backgroundColor: COLORS.PRIMARY, elevation: 0, shadowOpacity: 0 },
+      headerTintColor: COLORS.WHITE,
+      headerTitleStyle: { fontWeight: '700', fontSize: 18 },
     });
   }, [navigation]);
-  // Reçeteye tıklandığında (şimdilik bir şey yapmıyor)
-  const handleSelectPrescription = (prescription) => {
-    // İleride reçete detay ekranı (PDF veya görüntüleme) açılabilir
-    console.log("Seçilen Reçete:", prescription.id);
-  };
 
-  // Liste boşken gösterilecek bileşen
-  const renderEmptyList = () => (
-    <View style={styles.centerContainer}>
-      <Ionicons name="documents-outline" size={80} color={COLORS.BORDER} />
-      <Text style={styles.infoText}>Henüz kayıtlı bir reçeteniz bulunmuyor.</Text>
-    </View>
-  );
+  useEffect(() => {
+    const fetchPrescriptions = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      try {
+        const docRef = doc(db, 'patients', user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const items = data.pharmacySoldItems || [];
+          
+          if (items.length > 0) {
+            // Veritabanında tek bir liste var, bunu bir "Satış İşlemi" olarak grupluyoruz.
+            // Eğer ileride birden fazla satış olursa, 'pharmacySaleDate' e göre gruplamak gerekir.
+            // Şu anki yapıda tek bir satış tarihi var.
+            
+            const saleDate = data.pharmacySaleDate 
+                ? new Date(data.pharmacySaleDate).toLocaleDateString('tr-TR') 
+                : 'Tarih Yok';
+
+            const saleObject = {
+                id: 'unique_sale_1',
+                date: saleDate,
+                doctorName: data.assignedDoctorName || 'Belirtilmemiş',
+                drugs: items
+            };
+
+            setPrescriptions([saleObject]);
+          } else {
+            setPrescriptions([]);
+          }
+        }
+      } catch (error) {
+        console.error("Hata:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrescriptions();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <FlatList
-        data={DUMMY_PRESCRIPTIONS} // Şimdilik statik veriyi kullan
+        data={prescriptions}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <PrescriptionCard
-            item={item}
-            onPress={() => handleSelectPrescription(item)}
+          <PharmacySaleCard 
+            saleDate={item.date} 
+            items={item.drugs} 
+            doctorName={item.doctorName} 
           />
         )}
-        ListHeaderComponent={
-          <Text style={styles.mainHeader}>Reçetelerim</Text>
+        ListEmptyComponent={
+          <View style={styles.centerContainer}>
+            <Ionicons name="cube-outline" size={60} color="#CCC" />
+            <Text style={styles.infoText}>Henüz kayıtlı bir ilaç satışı bulunmuyor.</Text>
+          </View>
         }
-        ListEmptyComponent={renderEmptyList} // Liste boşsa bunu göster
         contentContainerStyle={styles.listContainer}
       />
     </SafeAreaView>
@@ -145,94 +143,31 @@ const PrescriptionListScreen = ({ navigation }) => {
 
 export default PrescriptionListScreen;
 
-// --- YENİ UI/UX STİLLERİ ---
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
-  },
-  listContainer: {
-    padding: 15,
-    flexGrow: 1, // Boş liste bileşeninin ortalanması için
-  },
-  mainHeader: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 10,
-  },
-  centerContainer: { // Boş Liste için
-    flex: 1,
-    paddingTop: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  infoText: { // Boş liste mesajı
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    marginTop: 15,
-    textAlign: 'center'
-  },
-  card: { // Reçete Kartı
-    backgroundColor: COLORS.WHITE,
-    borderRadius: 16,
-    padding: 15,
-    marginVertical: 8,
-    elevation: 3,
-    shadowColor: '#95A5A6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+  safeArea: { flex: 1, backgroundColor: COLORS.BACKGROUND },
+  listContainer: { padding: 15, flexGrow: 1 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop:50 },
+  infoText: { fontSize: 16, color: COLORS.TEXT_LIGHT, marginTop: 15, textAlign: 'center' },
+  
+  card: {
+    backgroundColor: COLORS.WHITE, borderRadius: 16, padding: 15, marginBottom: 15,
+    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6,
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
-    paddingBottom: 10,
+    flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: COLORS.BORDER, paddingBottom: 10, marginBottom:10
   },
   cardIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: COLORS.PRIMARY_LIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
+    width: 44, height: 44, borderRadius: 12, backgroundColor: COLORS.PRIMARY_LIGHT,
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
-  cardTextContainer: {
-    flex: 1,
-  },
-  cardTitle: { // Doktor Adı
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-  },
-  cardSubtitle: { // Departman
-    fontSize: 14,
-    color: COLORS.TEXT_LIGHT,
-  },
-  dateText: { // Tarih
-    fontSize: 13,
-    color: COLORS.TEXT_LIGHT,
-    fontWeight: '500',
-  },
-  drugList: { // İlaç listesi alanı
-    paddingTop: 10,
-  },
-  drugListTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.TEXT,
-    marginBottom: 5,
-  },
-  drugItem: {
-    fontSize: 14,
-    color: COLORS.TEXT_LIGHT,
-    lineHeight: 20,
-    marginLeft: 5,
-  },
+  cardTextContainer: { flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.TEXT },
+  cardSubtitle: { fontSize: 13, color: COLORS.TEXT_LIGHT },
+  dateText: { fontSize: 12, color: COLORS.TEXT_LIGHT, fontWeight: '500' },
+  
+  drugList: { paddingLeft: 5 },
+  drugListTitle: { fontSize: 14, fontWeight: '600', color: COLORS.TEXT, marginBottom: 8 },
+  drugRow: { flexDirection:'row', marginBottom: 8 },
+  drugName: { fontSize: 14, color: COLORS.TEXT, fontWeight:'500' },
+  drugDosage: { fontSize: 12, color: COLORS.TEXT_LIGHT },
 });
