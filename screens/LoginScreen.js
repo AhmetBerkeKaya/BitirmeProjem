@@ -8,285 +8,271 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
-  Alert, // 'Şifremi Unuttum' için gerekli
-  StatusBar
+  StatusBar,
+  Dimensions,
+  Alert
 } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
-import { Ionicons } from '@expo/vector-icons'; // İkonlar için
+import { auth } from '../firebaseConfig';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// --- YENİ RENK PALETİ ---
+const { width, height } = Dimensions.get('window');
+
+// --- GELECEĞİN SAĞLIĞI PALETİ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
-  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
-  WHITE: '#FFFFFF',        // Kart Arkaplanı
-  TEXT: '#2C3E50',         // Koyu Metin Rengi
-  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
-  BORDER: '#EAECEE',      // Kenarlık Rengi
-  DANGER: '#e74c3c',      // Hata Rengi
+  BG_START: '#0F172A', // Derin Lacivert (Neredeyse Siyah)
+  BG_END: '#1E293B',   // Antrasit Gri
+  
+  ACCENT_START: '#00F2C3', // Neon Turkuaz
+  ACCENT_END: '#0063F2',   // Elektrik Mavisi
+  
+  GLASS_BG: 'rgba(30, 41, 59, 0.7)', // Yarı saydam koyu katman
+  INPUT_BG: 'rgba(15, 23, 42, 0.6)', // Input içi daha koyu
+  
+  TEXT_MAIN: '#F1F5F9', // Kirli Beyaz (Göz yormaz)
+  TEXT_SEC: '#94A3B8',  // Soğuk Gri
+  BORDER: 'rgba(148, 163, 184, 0.2)', // Çok silik çerçeve
+  DANGER: '#FF4757',
 };
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // UI/UX state'leri
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  /**
-   * Giriş Yapma Fonksiyonu
-   */
   const handleLogin = async () => {
     if (email === '' || password === '') {
-      setError('Lütfen tüm alanları doldurun.');
+      setError('E-posta ve şifre gereklidir.');
       return;
     }
     setLoading(true);
     setError('');
-
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Başarılı girişten sonra App.js'teki onAuthStateChanged
-      // navigasyonu otomatik olarak AppStack'e (ClinicList) geçirecek.
-      console.log('Giriş başarılı:', email);
     } catch (err) {
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-        setError('E-posta veya şifre hatalı.');
-      } else {
-        setError('Bir hata oluştu. Lütfen tekrar deneyin.');
-      }
+      setError('Giriş başarısız. Bilgilerinizi kontrol edin.');
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Şifre Sıfırlama Fonksiyonu
-   */
   const handlePasswordReset = () => {
     if (email === '') {
-      setError('Şifre sıfırlama için lütfen e-posta adresinizi girin.');
+      setError('Sıfırlama linki için e-posta girin.');
       return;
     }
-    setError('');
-    setLoading(true); // Yüklemeyi başlat
-
     sendPasswordResetEmail(auth, email)
-      .then(() => {
-        setLoading(false);
-        Alert.alert(
-          'E-posta Gönderildi',
-          'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.'
-        );
-      })
-      .catch((err) => {
-        setLoading(false);
-        if (err.code === 'auth/user-not-found') {
-          setError('Bu e-posta adresine kayıtlı bir kullanıcı bulunamadı.');
-        } else {
-          setError('Şifre sıfırlama e-postası gönderilemedi.');
-        }
-      });
+      .then(() => Alert.alert('Gönderildi', 'E-postanızı kontrol edin.'))
+      .catch(() => setError('E-posta sistemde bulunamadı.'));
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+      
+      {/* 1. KATMAN: ZEMİN GRADIENT */}
+      <LinearGradient
+        colors={[COLORS.BG_START, COLORS.BG_END]}
+        style={styles.backgroundGradient}
+      />
+
+      {/* 2. KATMAN: DEKORATİF GLOW (IŞILTI) BLOBLARI */}
+      <View style={styles.glowBlobTop} />
+      <View style={styles.glowBlobBottom} />
+
+      {/* 3. KATMAN: İÇERİK */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <Ionicons name="pulse-outline" size={80} color={COLORS.PRIMARY} />
+          {/* HEADER ALANI */}
+          <View style={styles.headerArea}>
+            <View style={styles.logoContainer}>
+              <LinearGradient
+                colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+                style={styles.logoGradient}
+              >
+                <Ionicons name="medical" size={42} color="#FFF" />
+              </LinearGradient>
+              {/* Logo Arkasındaki Glow */}
+              <View style={styles.logoGlow} />
+            </View>
+            
+            <Text style={styles.welcomeTitle}>RTM KLİNİK</Text>
+            <Text style={styles.welcomeSub}>Geleceğin Sağlık Teknolojisi</Text>
           </View>
 
-          <Text style={styles.title}>Hoş Geldiniz</Text>
-          <Text style={styles.subtitle}>Lütfen hesabınıza giriş yapın.</Text>
+          {/* CAM KART (GLASS CARD) */}
+          <View style={styles.glassCard}>
+            
+            {/* HATA MESAJI */}
+            {error ? (
+              <View style={styles.errorBox}>
+                <Ionicons name="warning" size={18} color={COLORS.DANGER} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
-          {/* Hata Mesajı Alanı */}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {/* INPUT: EMAIL */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>E-POSTA</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="mail" size={20} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="ornek@mail.com"
+                  placeholderTextColor={COLORS.TEXT_SEC}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
 
-          {/* E-posta Girişi */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="E-posta Adresi"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            {/* INPUT: PASSWORD */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>ŞİFRE</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="key" size={20} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor={COLORS.TEXT_SEC}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+
+            {/* ŞİFREMİ UNUTTUM */}
+            <TouchableOpacity onPress={handlePasswordReset} style={styles.forgotBtn}>
+              <Text style={styles.forgotText}>Şifrenizi mi unuttunuz?</Text>
+            </TouchableOpacity>
+
+            {/* GİRİŞ BUTONU */}
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={handleLogin}
+              disabled={loading}
+              style={styles.loginBtnContainer}
+            >
+              <LinearGradient
+                colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+                start={{x: 0, y: 0}} end={{x: 1, y: 0}}
+                style={styles.loginBtn}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.loginBtnText}>GİRİŞ YAP</Text>
+                )}
+              </LinearGradient>
+              {/* Buton Glow Efekti */}
+              <View style={styles.btnGlow} />
+            </TouchableOpacity>
+
           </View>
 
-          {/* Şifre Girişi */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Şifre"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry // Şifreyi gizler
-            />
-          </View>
-          
-          {/* Şifremi Unuttum Linki */}
-          <TouchableOpacity onPress={handlePasswordReset} style={styles.forgotPasswordButton}>
-            <Text style={styles.forgotPasswordText}>Şifremi unuttum</Text>
-          </TouchableOpacity>
-
-          {/* Giriş Yap Butonu */}
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={COLORS.WHITE} />
-            ) : (
-              <Text style={styles.buttonText}>Giriş Yap</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Kayıt Ol Linki */}
-          <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>Hesabınız yok mu? </Text>
+          {/* FOOTER */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Henüz hesabınız yok mu?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-              <Text style={[styles.signupText, styles.signupLink]}>Kayıt Olun</Text>
+              <Text style={styles.signupText}> Kayıt Olun</Text>
             </TouchableOpacity>
           </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
-// --- YENİ UI/UX STİLLERİ ---
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND, // Arkaplan rengi App.js ile uyumlu
+  container: { flex: 1, backgroundColor: COLORS.BG_START },
+  backgroundGradient: { ...StyleSheet.absoluteFillObject },
+  
+  // DEKORATİF IŞILTILAR (Glow Blobs)
+  glowBlobTop: {
+    position: 'absolute', top: -100, right: -50,
+    width: 300, height: 300, borderRadius: 150,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.15,
+    transform: [{ scaleX: 1.5 }]
   },
-  container: {
-    flex: 1,
+  glowBlobBottom: {
+    position: 'absolute', bottom: -100, left: -50,
+    width: 350, height: 350, borderRadius: 175,
+    backgroundColor: COLORS.ACCENT_END, opacity: 0.1,
+    transform: [{ scaleY: 1.2 }]
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 25,
+
+  scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 60 },
+
+  // HEADER
+  headerArea: { alignItems: 'center', marginBottom: 40 },
+  logoContainer: { position: 'relative', marginBottom: 20 },
+  logoGradient: {
+    width: 90, height: 90, borderRadius: 30,
+    justifyContent: 'center', alignItems: 'center',
+    zIndex: 2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)'
   },
-  logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: COLORS.WHITE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    elevation: 5, // Hafif gölge
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  logoGlow: {
+    position: 'absolute', top: 10, left: 10, right: 10, bottom: 10,
+    backgroundColor: COLORS.ACCENT_START, borderRadius: 30, opacity: 0.6,
+    zIndex: 1, transform: [{ scale: 1.2 }], blurRadius: 20 // Android'de blurRadius çalışmazsa opacity yeterli
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 10,
+  welcomeTitle: {
+    fontSize: 32, fontWeight: '800', color: COLORS.TEXT_MAIN, letterSpacing: 2,
+    textShadowColor: 'rgba(0, 242, 195, 0.3)', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10
   },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    marginBottom: 25,
+  welcomeSub: { fontSize: 14, color: COLORS.ACCENT_START, letterSpacing: 1, marginTop: 5, fontWeight: '600', opacity: 0.8 },
+
+  // GLASS CARD
+  glassCard: {
+    backgroundColor: COLORS.GLASS_BG,
+    borderRadius: 24, padding: 24,
+    borderWidth: 1, borderColor: COLORS.BORDER,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10
   },
-  errorText: {
-    color: COLORS.DANGER,
-    fontSize: 14,
-    marginBottom: 15,
-    textAlign: 'center',
+
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 71, 87, 0.15)',
+    padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 71, 87, 0.3)'
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    height: 55, // Biraz daha yüksek
-    backgroundColor: COLORS.WHITE, // İçi beyaz
-    borderRadius: 12, // Daha yumuşak kenar
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    borderWidth: 1, // Kenarlık
-    borderColor: COLORS.BORDER,
+  errorText: { color: '#FF6B6B', marginLeft: 8, fontSize: 13, fontWeight: '600' },
+
+  inputContainer: { marginBottom: 20 },
+  inputLabel: { color: COLORS.TEXT_SEC, fontSize: 12, fontWeight: 'bold', marginBottom: 8, marginLeft: 4, letterSpacing: 0.5 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.INPUT_BG,
+    borderRadius: 16, height: 56, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: COLORS.BORDER
   },
-  inputIcon: {
-    marginRight: 10,
+  input: { flex: 1, height: '100%', color: COLORS.TEXT_MAIN, fontSize: 16 },
+
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 30, marginRight: 4 },
+  forgotText: { color: COLORS.TEXT_SEC, fontSize: 13, textDecorationLine: 'underline' },
+
+  loginBtnContainer: { position: 'relative', marginTop: 10 },
+  loginBtn: {
+    height: 56, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center', zIndex: 2
   },
-  input: {
-    flex: 1,
-    height: '100%',
-    fontSize: 16,
-    color: COLORS.TEXT,
+  btnGlow: {
+    position: 'absolute', top: 5, left: 10, right: 10, bottom: -10,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.4, borderRadius: 18, zIndex: 1,
+    transform: [{ scaleY: 0.8 }]
   },
-  forgotPasswordButton: {
-    alignSelf: 'flex-end', // Sağa yasla
-    marginBottom: 20,
-  },
-  forgotPasswordText: {
-    color: COLORS.PRIMARY,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  button: {
-    width: '100%',
-    height: 55,
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: 30, // Tam yuvarlak kenar
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: COLORS.PRIMARY, // Gölge ana renkte
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  buttonDisabled: {
-    backgroundColor: COLORS.TEXT_LIGHT,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonText: {
-    color: COLORS.WHITE,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  signupContainer: {
-    flexDirection: 'row',
-    marginTop: 30,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER,
-  },
-  signupText: {
-    fontSize: 15,
-    color: COLORS.TEXT_LIGHT,
-  },
-  signupLink: {
-    color: COLORS.PRIMARY,
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
+  loginBtnText: { color: '#0F172A', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  // FOOTER
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 40, alignItems: 'center' },
+  footerText: { color: COLORS.TEXT_SEC, fontSize: 14 },
+  signupText: { color: COLORS.ACCENT_START, fontWeight: 'bold', fontSize: 14 },
 });
 
 export default LoginScreen;

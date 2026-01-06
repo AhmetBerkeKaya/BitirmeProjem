@@ -8,350 +8,313 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
-  StatusBar
+  StatusBar,
+  Dimensions,
+  Alert
 } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore'; // Firestore'a yazmak için
-import { auth, db } from '../firebaseConfig'; // Sıfırdan kurduğumuz config
+import { doc, setDoc } from 'firebase/firestore'; 
+import { auth, db } from '../firebaseConfig'; 
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// --- YENİ RENK PALETİ ---
+const { width, height } = Dimensions.get('window');
+
+// --- GELECEĞİN SAĞLIĞI PALETİ (Login ile Aynı) ---
 const COLORS = {
-  PRIMARY: '#00BFA6',     // Turkuaz (Ana renk)
-  BACKGROUND: '#F5F9FC', // Çok hafif soğuk gri
-  WHITE: '#FFFFFF',        // Kart Arkaplanı
-  TEXT: '#2C3E50',         // Koyu Metin Rengi
-  TEXT_LIGHT: '#5D6D7E',  // Açık Metin Rengi
-  BORDER: '#EAECEE',      // Kenarlık Rengi
-  DANGER: '#e74c3c',      // Hata Rengi
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+  GLASS_BG: 'rgba(30, 41, 59, 0.7)',
+  INPUT_BG: 'rgba(15, 23, 42, 0.6)',
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  BORDER: 'rgba(148, 163, 184, 0.2)',
+  DANGER: '#FF4757',
 };
 
 const SignUpScreen = ({ navigation }) => {
-  // --- Form State'leri (Mimariye uygun) ---
+  // Form State'leri
   const [fullName, setFullName] = useState('');
   const [tcNo, setTcNo] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   
-  // --- UI/UX State'leri ---
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  /**
-   * Kayıt Olma Fonksiyonu (Auth + Firestore)
-   */
   const handleSignUp = async () => {
-    setError(''); // Hataları temizle
-
-    // --- 1. Validasyon (Form Doğrulama) ---
-    if (!fullName || !tcNo || !phone || !email || !password || !confirmPassword) {
-      setError('Lütfen tüm alanları doldurun.');
+    if (fullName === '' || tcNo === '' || phone === '' || email === '' || password === '') {
+      setError('Lütfen tüm alanları eksiksiz doldurun.');
       return;
     }
-    if (tcNo.length !== 11 || !/^[0-9]+$/.test(tcNo)) {
-      setError('Geçerli bir TC Kimlik Numarası girin (11 Hane).');
-      return;
-    }
-    if (phone.length < 10 || !/^[0-9]+$/.test(phone)) {
-        setError('Geçerli bir telefon numarası girin (Örn: 5xxxxxxxxx).');
-        return;
-    }
-    if (password !== confirmPassword) {
-      setError('Şifreler uyuşmuyor.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Şifre en az 6 karakter olmalıdır.');
-      return;
-    }
-
     setLoading(true);
+    setError('');
 
     try {
-      // --- 2. Adım: Firebase Authentication Kaydı ---
+      // 1. Firebase Auth ile kullanıcı oluştur
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
-      console.log('Auth kaydı başarılı:', user.uid);
 
-      // --- 3. Adım: Firestore Veritabanı Kaydı (MİMARİNİN KALBİ) ---
-      // 'patients' (Kaynak 15) koleksiyonuna yeni dokümanı Auth UID'si ile oluştur.
-      const patientRef = doc(db, 'patients', user.uid);
-      
-      const patientData = {
-        // Formdan gelen bilgiler
+      // 2. Firestore'a ek bilgilerle kaydet
+      await setDoc(doc(db, 'patients', user.uid), {
+        uid: user.uid,
         fullName: fullName,
         tcNo: tcNo,
         phone: phone,
-        email: email.toLowerCase(),
-        
-        // Şema (Kaynak 15) için varsayılan değerler
-        clinicId: null, // Henüz bir klinik seçmedi
-        birthDate: "",
-        birthPlace: "",
-        gender: "",
-        address: "",
-        status: "active",
-        isAnamnezCompleted: false,
-        createdAt: new Date().toISOString(), // Kayıt tarihi
-        updatedAt: new Date().toISOString()
-      };
+        email: email,
+        role: 'patient',
+        createdAt: new Date().toISOString()
+      });
 
-      // Bilgiyi Firestore'a yaz
-      await setDoc(patientRef, patientData);
-      
-      console.log('Firestore (patients) kaydı başarılı:', user.uid);
-      
-      // Başarılı kayıttan sonra App.js'teki onAuthStateChanged
-      // navigasyonu otomatik olarak AppStack'e (ClinicList) geçirecek.
-
+      // Başarılı
+      Alert.alert('Tebrikler!', 'Hesabınız başarıyla oluşturuldu.', [
+        { text: 'Giriş Yap', onPress: () => navigation.navigate('Login') }
+      ]);
     } catch (err) {
-      // Hata yönetimi
-      if (err.code === 'auth/email-already-in-use') {
-        setError('Bu e-posta adresi zaten kullanılıyor.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Geçersiz bir e-posta adresi girdiniz.');
-      } else {
-        setError('Kayıt sırasında bir hata oluştu.');
-        console.error("Kayıt hatası:", err);
-      }
+      console.error(err);
+      setError(err.message.includes('email-already-in-use') 
+        ? 'Bu e-posta adresi zaten kullanımda.' 
+        : 'Kayıt olurken bir hata oluştu. Lütfen bilgileri kontrol edin.');
     } finally {
-      setLoading(false); // Yüklemeyi bitir
+      setLoading(false);
     }
   };
 
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        {/* Geri Butonu */}
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back-outline" size={28} color={COLORS.TEXT} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+      
+      {/* 1. KATMAN: ZEMİN GRADIENT */}
+      <LinearGradient
+        colors={[COLORS.BG_START, COLORS.BG_END]}
+        style={styles.backgroundGradient}
+      />
 
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+      {/* 2. KATMAN: DEKORATİF GLOW BLOBLARI (Farklı pozisyonlar) */}
+      <View style={styles.glowBlobTopLeft} />
+      <View style={styles.glowBlobBottomRight} />
+
+      {/* 3. KATMAN: İÇERİK */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           
-          <Text style={styles.title}>Yeni Hesap Oluştur</Text>
-          <Text style={styles.subtitle}>Devam etmek için bilgilerinizi girin.</Text>
-
-          {/* Hata Mesajı Alanı */}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          {/* Form Alanları */}
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Ad Soyad"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Ionicons name="card-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="TC Kimlik Numarası"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={tcNo}
-              onChangeText={setTcNo}
-              keyboardType="numeric"
-              maxLength={11}
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Telefon (5xxxxxxxxx)"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={10}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="E-posta Adresi"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Şifre (En az 6 karakter)"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Şifre Tekrar"
-              placeholderTextColor={COLORS.TEXT_LIGHT}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-          </View>
-          
-          {/* Kayıt Ol Butonu */}
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSignUp}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={COLORS.WHITE} />
-            ) : (
-              <Text style={styles.buttonText}>Hesap Oluştur</Text>
-            )}
+          {/* GERİ BUTONU */}
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.TEXT_MAIN} />
           </TouchableOpacity>
 
-          {/* Giriş Yap Linki */}
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Zaten hesabınız var mı? </Text>
+          {/* HEADER */}
+          <View style={styles.headerArea}>
+            <Text style={styles.headerTitle}>RTM AİLESİ</Text>
+            <Text style={styles.headerSub}>Sağlık yolculuğunuza başlayın</Text>
+          </View>
+
+          {/* CAM KART (FORM) */}
+          <View style={styles.glassCard}>
+            
+            {error ? (
+              <View style={styles.errorBox}>
+                <Ionicons name="warning" size={18} color={COLORS.DANGER} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* AD SOYAD */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>AD SOYAD</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="person" size={18} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Adınızı giriniz"
+                  placeholderTextColor={COLORS.TEXT_SEC}
+                  value={fullName}
+                  onChangeText={setFullName}
+                />
+              </View>
+            </View>
+
+            {/* TC KİMLİK & TELEFON (YAN YANA) */}
+            <View style={styles.row}>
+              <View style={[styles.inputContainer, {flex: 1, marginRight: 8}]}>
+                <Text style={styles.inputLabel}>TC KİMLİK</Text>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="card" size={18} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="11 Haneli"
+                    placeholderTextColor={COLORS.TEXT_SEC}
+                    value={tcNo}
+                    onChangeText={setTcNo}
+                    keyboardType="numeric"
+                    maxLength={11}
+                  />
+                </View>
+              </View>
+              
+              <View style={[styles.inputContainer, {flex: 1, marginLeft: 8}]}>
+                <Text style={styles.inputLabel}>TELEFON</Text>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="call" size={18} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="5XX..."
+                    placeholderTextColor={COLORS.TEXT_SEC}
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* E-POSTA */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>E-POSTA</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="mail" size={18} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="ornek@mail.com"
+                  placeholderTextColor={COLORS.TEXT_SEC}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
+
+            {/* ŞİFRE */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>ŞİFRE</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="key" size={18} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="En az 6 karakter"
+                  placeholderTextColor={COLORS.TEXT_SEC}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+
+            {/* KAYIT BUTONU */}
+            <TouchableOpacity 
+              activeOpacity={0.8}
+              onPress={handleSignUp}
+              disabled={loading}
+              style={styles.signupBtnContainer}
+            >
+              <LinearGradient
+                colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+                start={{x: 0, y: 0}} end={{x: 1, y: 0}}
+                style={styles.signupBtn}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.signupBtnText}>HESAP OLUŞTUR</Text>
+                )}
+              </LinearGradient>
+              <View style={styles.btnGlow} />
+            </TouchableOpacity>
+
+          </View>
+
+          {/* FOOTER */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Zaten hesabınız var mı?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={[styles.loginText, styles.loginLink]}>Giriş Yapın</Text>
+              <Text style={styles.loginLinkText}> Giriş Yapın</Text>
             </TouchableOpacity>
           </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
-// --- Stiller (LoginScreen ile çok benzer) ---
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
+  container: { flex: 1, backgroundColor: COLORS.BG_START },
+  backgroundGradient: { ...StyleSheet.absoluteFillObject },
+
+  // DEKORATİF IŞILTILAR
+  glowBlobTopLeft: {
+    position: 'absolute', top: -100, left: -100,
+    width: 300, height: 300, borderRadius: 150,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.15,
   },
-  container: {
-    flex: 1,
+  glowBlobBottomRight: {
+    position: 'absolute', bottom: -50, right: -50,
+    width: 350, height: 350, borderRadius: 175,
+    backgroundColor: COLORS.ACCENT_END, opacity: 0.1,
   },
-  // Geri butonu (Header'ı kapattığımız için manuel ekledik)
+
+  scrollContainer: { flexGrow: 1, padding: 24, paddingTop: 50 },
+  
   backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? 20 : 50, // Android/iOS uyumu
-    left: 20,
-    zIndex: 10,
-    padding: 5,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 20
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 25,
-    paddingTop: 80, // Geri butonunun altına
+
+  headerArea: { marginBottom: 30 },
+  headerTitle: {
+    fontSize: 28, fontWeight: '800', color: COLORS.TEXT_MAIN, letterSpacing: 1,
+    textShadowColor: 'rgba(0, 242, 195, 0.3)', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 10,
+  headerSub: { fontSize: 14, color: COLORS.TEXT_SEC, marginTop: 5 },
+
+  // GLASS CARD
+  glassCard: {
+    backgroundColor: COLORS.GLASS_BG,
+    borderRadius: 24, padding: 24,
+    borderWidth: 1, borderColor: COLORS.BORDER,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10
   },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    marginBottom: 25,
-    textAlign: 'center',
+
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 71, 87, 0.15)',
+    padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 71, 87, 0.3)'
   },
-  errorText: {
-    color: COLORS.DANGER,
-    fontSize: 14,
-    marginBottom: 15,
-    textAlign: 'center',
+  errorText: { color: '#FF6B6B', marginLeft: 8, fontSize: 13, fontWeight: '600', flex: 1 },
+
+  inputContainer: { marginBottom: 16 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  
+  inputLabel: { color: COLORS.TEXT_SEC, fontSize: 11, fontWeight: 'bold', marginBottom: 6, marginLeft: 4, letterSpacing: 0.5 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.INPUT_BG,
+    borderRadius: 16, height: 50, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: COLORS.BORDER
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    height: 55,
-    backgroundColor: COLORS.WHITE,
-    borderRadius: 12,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER,
+  input: { flex: 1, height: '100%', color: COLORS.TEXT_MAIN, fontSize: 15 },
+
+  signupBtnContainer: { position: 'relative', marginTop: 10 },
+  signupBtn: {
+    height: 56, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center', zIndex: 2
   },
-  inputIcon: {
-    marginRight: 10,
+  btnGlow: {
+    position: 'absolute', top: 5, left: 10, right: 10, bottom: -10,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.4, borderRadius: 18, zIndex: 1,
+    transform: [{ scaleY: 0.8 }]
   },
-  input: {
-    flex: 1,
-    height: '100%',
-    fontSize: 16,
-    color: COLORS.TEXT,
-  },
-  button: {
-    width: '100%',
-    height: 55,
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10, // Form ile buton arası boşluk
-    elevation: 3,
-    shadowColor: COLORS.PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  buttonDisabled: {
-    backgroundColor: COLORS.TEXT_LIGHT,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonText: {
-    color: COLORS.WHITE,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  loginContainer: {
-    flexDirection: 'row',
-    marginTop: 30,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.BORDER,
-  },
-  loginText: {
-    fontSize: 15,
-    color: COLORS.TEXT_LIGHT,
-  },
-  loginLink: {
-    color: COLORS.PRIMARY,
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
+  signupBtnText: { color: '#0F172A', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 30, alignItems: 'center', marginBottom: 20 },
+  footerText: { color: COLORS.TEXT_SEC, fontSize: 14 },
+  loginLinkText: { color: COLORS.ACCENT_START, fontWeight: 'bold', fontSize: 14 },
 });
 
 export default SignUpScreen;

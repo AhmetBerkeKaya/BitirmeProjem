@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -15,20 +15,22 @@ import { db } from '../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// --- RENK PALETİ ---
+// --- FUTURE HEALTH PALETİ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',
-  PRIMARY_DARK: '#00997A',
-  PRIMARY_LIGHT: '#E6F8F5',
-  GRADIENT_START: '#00BFA6',
-  GRADIENT_END: '#00D9B8',
-  BACKGROUND: '#F5F9FC',
-  WHITE: '#FFFFFF',
-  TEXT: '#2C3E50',
-  TEXT_LIGHT: '#5D6D7E',
-  BORDER: '#EAECEE',
-  SEARCH_BG: '#EEF2F5',
-  DANGER: '#e74c3c',
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+  
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+  
+  GLASS_BG: 'rgba(30, 41, 59, 0.6)',
+  GLASS_BORDER: 'rgba(255, 255, 255, 0.1)',
+  INPUT_BG: 'rgba(15, 23, 42, 0.6)',
+  
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  
+  DANGER: '#FF4757',
 };
 
 const DepartmentListScreen = ({ route, navigation }) => {
@@ -41,69 +43,63 @@ const DepartmentListScreen = ({ route, navigation }) => {
   const [error, setError] = useState(null);
 
   /**
+   * Header Ayarları
+   */
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: 'BRANŞ SEÇİMİ',
+      headerStyle: { backgroundColor: COLORS.BG_START, shadowOpacity: 0, elevation: 0 },
+      headerTintColor: COLORS.TEXT_MAIN,
+      headerTitleStyle: { fontWeight: '800', letterSpacing: 1, fontSize: 18 },
+      headerLeft: () => (
+        <Ionicons 
+          name="arrow-back" size={24} color={COLORS.TEXT_MAIN} 
+          style={{marginLeft: 15}} onPress={() => navigation.goBack()} 
+        />
+      )
+    });
+  }, [navigation]);
+
+  /**
    * Departmanları Çekme
    */
   useEffect(() => {
-    navigation.setOptions({
-      title: `${clinicName} - Branşlar`,
-      headerStyle: {
-        backgroundColor: COLORS.PRIMARY, // Beyaz yerine PRIMARY renk
-        elevation: 0,
-        shadowOpacity: 0,
-      },
-      headerTintColor: COLORS.WHITE, // Geri butonu beyaz
-      headerTitleStyle: {
-        fontWeight: '700',
-        fontSize: 18,
-        color: COLORS.WHITE,
-      },
-    });
     const fetchDepartments = async () => {
       setError(null);
       setLoading(true);
       try {
-        if (!clinicId) {
-          throw new Error("Klinik ID bulunamadı.");
-        }
+        if (!clinicId) throw new Error("Klinik ID bulunamadı.");
 
         const doctorsRef = collection(db, 'doctors');
         const q = query(doctorsRef, where('clinicId', '==', clinicId));
         const querySnapshot = await getDocs(q);
 
-        const allSpecializations = querySnapshot.docs.map(
-          doc => doc.data().specialization
-        );
-
+        const allSpecializations = querySnapshot.docs.map(doc => doc.data().specialization);
         const uniqueSpecMap = new Map();
+        
         allSpecializations.forEach(specName => {
           if (specName && typeof specName === 'string') {
             const key = specName.toLowerCase();
-            if (!uniqueSpecMap.has(key)) {
-              uniqueSpecMap.set(key, specName);
-            }
+            if (!uniqueSpecMap.has(key)) uniqueSpecMap.set(key, specName);
           }
         });
 
         const formattedList = [...uniqueSpecMap.values()].map((specName) => ({
-          id: specName,
-          name: specName
+          id: specName, name: specName
         }));
 
         formattedList.sort((a, b) => a.name.localeCompare(b.name));
-
         setDepartments(formattedList);
         setFilteredDepartments(formattedList);
 
       } catch (err) {
-        console.error("Departmanları çekerken hata:", err);
-        setError("Departmanlar yüklenemedi. (Firestore Dizinlerini kontrol edin!)");
+        setError("Branş listesi alınamadı.");
       } finally {
         setLoading(false);
       }
     };
-
     fetchDepartments();
-  }, [clinicId, navigation, clinicName]);
+  }, [clinicId]);
 
   /**
    * Arama Filtresi
@@ -119,33 +115,28 @@ const DepartmentListScreen = ({ route, navigation }) => {
     }
   }, [searchQuery, departments]);
 
-  /**
-   * Doktor Listesine Yönlendirme
-   */
   const handleSelectDepartment = (departmentName) => {
     navigation.navigate('DoctorList', {
-      clinicId: clinicId,
-      departmentName: departmentName,
-      clinicName: clinicName
+      clinicId, departmentName, clinicName
     });
   };
 
   /**
-   * Arama Çubuğu Component
+   * Fütüristik Arama Çubuğu
    */
   const SearchBar = () => (
-    <View style={styles.searchContainer}>
-      <Ionicons name="search-outline" size={20} color={COLORS.TEXT_LIGHT} style={styles.searchIcon} />
+    <View style={styles.searchWrapper}>
+      <Ionicons name="search" size={20} color={COLORS.ACCENT_START} style={styles.searchIcon} />
       <TextInput
         style={styles.searchInput}
         placeholder="Branş ara... (örn: Kardiyoloji)"
-        placeholderTextColor={COLORS.TEXT_LIGHT}
+        placeholderTextColor={COLORS.TEXT_SEC}
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
       {searchQuery.length > 0 && (
         <TouchableOpacity onPress={() => setSearchQuery('')}>
-          <Ionicons name="close-circle" size={20} color={COLORS.TEXT_LIGHT} />
+          <Ionicons name="close-circle" size={20} color={COLORS.TEXT_SEC} />
         </TouchableOpacity>
       )}
     </View>
@@ -155,264 +146,128 @@ const DepartmentListScreen = ({ route, navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY} />
-          <Text style={styles.infoText}>Branşlar Yükleniyor...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.centerContainer}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+        <LinearGradient colors={[COLORS.BG_START, COLORS.BG_END]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color={COLORS.ACCENT_START} />
+        <Text style={styles.loadingText}>Branşlar Yükleniyor...</Text>
+      </View>
     );
   }
 
-  if (error) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
-        <View style={styles.centerContainer}>
-          <Ionicons name="warning-outline" size={60} color={COLORS.DANGER} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const renderItem = ({ item, index }) => (
+  const renderItem = ({ item }) => (
     <TouchableOpacity
-      style={[styles.card, {
-        transform: [{ scale: 1 }]
-      }]}
+      style={styles.cardContainer}
       onPress={() => handleSelectDepartment(item.name)}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       <LinearGradient
-        colors={[COLORS.PRIMARY_LIGHT, COLORS.WHITE]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.cardGradient}
+        colors={[COLORS.GLASS_BG, 'rgba(15, 23, 42, 0.4)']}
+        style={styles.glassCard}
       >
-        <View style={styles.cardContent}>
-          <View style={styles.cardIconContainer}>
-            <Ionicons name="medkit" size={26} color={COLORS.PRIMARY} />
-          </View>
-          <View style={styles.cardTextContainer}>
-            <Text style={styles.cardTitle}>{item.name}</Text>
-            <Text style={styles.cardSubtitle}>Doktorları görüntüle</Text>
-          </View>
-          <View style={styles.arrowContainer}>
-            <Ionicons name="chevron-forward" size={22} color={COLORS.PRIMARY} />
-          </View>
+        <View style={styles.cardIconBox}>
+          <LinearGradient
+            colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+            style={styles.iconGradient}
+          >
+            <Ionicons name="medkit" size={22} color="#FFF" />
+          </LinearGradient>
         </View>
+        
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>{item.name}</Text>
+          <Text style={styles.cardSubtitle}>Doktorları görüntüle</Text>
+        </View>
+        
+        <Ionicons name="chevron-forward" size={20} color={COLORS.ACCENT_START} style={{opacity: 0.8}} />
       </LinearGradient>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+      <LinearGradient colors={[COLORS.BG_START, COLORS.BG_END]} style={StyleSheet.absoluteFill} />
+      
+      {/* Dekoratif Işıltılar */}
+      <View style={styles.glowTop} />
+      <View style={styles.glowBottom} />
 
-      {/* Header Gradient */}
-      <LinearGradient
-        colors={[COLORS.GRADIENT_START, COLORS.GRADIENT_END]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Branş Seçimi</Text>
-        <Text style={styles.headerSubtitle}>
-          {departments.length} branş listeleniyor
-        </Text>
-      </LinearGradient>
-
-      <View style={styles.contentContainer}>
-        <SearchBar />
-
-        {filteredDepartments.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={60} color={COLORS.TEXT_LIGHT} />
-            <Text style={styles.emptyText}>
-              {searchQuery ? 'Arama sonucu bulunamadı' : 'Branş bulunamadı'}
-            </Text>
-            {searchQuery && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={() => setSearchQuery('')}
-              >
-                <Text style={styles.clearButtonText}>Aramayı Temizle</Text>
-              </TouchableOpacity>
-            )}
+      <SafeAreaView style={{flex: 1}}>
+        <View style={styles.contentContainer}>
+          <View style={styles.headerInfo}>
+            <Text style={styles.clinicName}>{clinicName}</Text>
+            <Text style={styles.deptCount}>{departments.length} Branş Mevcut</Text>
           </View>
-        ) : (
-          <FlatList
-            data={filteredDepartments}
-            renderItem={renderItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
-    </SafeAreaView>
+
+          <SearchBar />
+
+          {filteredDepartments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search-outline" size={60} color={COLORS.TEXT_SEC} />
+              <Text style={styles.emptyText}>Branş bulunamadı.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredDepartments}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
   );
 };
 
-// --- STİLLER ---
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    elevation: 8,
-    shadowColor: COLORS.PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.WHITE,
-    marginBottom: 5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: COLORS.WHITE,
-    opacity: 0.9,
-  },
-  contentContainer: {
-    flex: 1,
-    paddingHorizontal: 15,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.WHITE,
-    borderRadius: 15,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginTop: 20,
-    marginBottom: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.TEXT,
-  },
-  listContainer: {
-    paddingBottom: 20,
-  },
-  card: {
-    marginVertical: 8,
-    borderRadius: 18,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-  },
-  cardGradient: {
-    borderRadius: 18,
-  },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 18,
-  },
-  cardIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: COLORS.WHITE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-    elevation: 2,
-    shadowColor: COLORS.PRIMARY,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  cardTextContainer: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.TEXT,
-    marginBottom: 3,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: COLORS.TEXT_LIGHT,
-  },
-  arrowContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: COLORS.WHITE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    textAlign: 'center',
-    marginTop: 15,
-  },
-  clearButton: {
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: 25,
-    elevation: 3,
-  },
-  clearButtonText: {
-    color: COLORS.WHITE,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  infoText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: COLORS.DANGER,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-});
-
 export default DepartmentListScreen;
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.BG_START },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.BG_START },
+  loadingText: { color: COLORS.TEXT_SEC, marginTop: 15 },
+
+  // Dekoratif
+  glowTop: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_START, opacity: 0.1, transform: [{ scale: 1.2 }] },
+  glowBottom: { position: 'absolute', bottom: -50, left: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_END, opacity: 0.1 },
+
+  contentContainer: { flex: 1 },
+  
+  // Header Info
+  headerInfo: { paddingHorizontal: 20, paddingTop: 10, marginBottom: 10 },
+  clinicName: { fontSize: 14, color: COLORS.ACCENT_START, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase' },
+  deptCount: { fontSize: 24, fontWeight: '800', color: COLORS.TEXT_MAIN, marginTop: 4 },
+
+  // Arama
+  searchWrapper: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.INPUT_BG,
+    borderRadius: 16, paddingHorizontal: 15, height: 56, borderWidth: 1, borderColor: COLORS.GLASS_BORDER, 
+    marginHorizontal: 20, marginBottom: 20
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, color: COLORS.TEXT_MAIN, fontSize: 16 },
+
+  // Liste
+  listContainer: { paddingBottom: 30 },
+
+  // Cam Kart (Branş)
+  cardContainer: { paddingHorizontal: 20, marginBottom: 12 },
+  glassCard: {
+    flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.GLASS_BORDER, overflow: 'hidden'
+  },
+  cardIconBox: {
+    width: 48, height: 48, borderRadius: 16, marginRight: 15,
+    shadowColor: COLORS.ACCENT_START, shadowOpacity: 0.3, shadowRadius: 10
+  },
+  iconGradient: { flex: 1, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  
+  cardContent: { flex: 1 },
+  cardTitle: { fontSize: 17, fontWeight: '700', color: COLORS.TEXT_MAIN, marginBottom: 4 },
+  cardSubtitle: { fontSize: 13, color: COLORS.TEXT_SEC },
+
+  emptyContainer: { alignItems: 'center', marginTop: 60 },
+  emptyText: { color: COLORS.TEXT_SEC, marginTop: 15, fontSize: 15 }
+});

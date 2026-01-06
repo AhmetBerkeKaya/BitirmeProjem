@@ -7,33 +7,40 @@ import {
   StyleSheet,
   ActivityIndicator,
   SafeAreaView,
-  Alert,
   TextInput,
   Animated,
   Modal,
-  ScrollView
+  ScrollView,
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import { collection, getDocs } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// --- GELİŞTİRİLMİŞ RENK PALETİ ---
+const { width } = Dimensions.get('window');
+
+// --- FUTURE HEALTH RENK PALETİ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',
-  PRIMARY_LIGHT: '#4DD0C1',
-  PRIMARY_DARK: '#00A690',
-  BACKGROUND: '#F8FAFB',
-  CARD_BG: '#FFFFFF',
-  TEXT: '#2C3E50',
-  TEXT_LIGHT: '#7F8C8D',
-  TEXT_MUTED: '#95A5A6',
-  BORDER: '#E8ECEF',
-  DANGER: '#E74C3C',
-  SUCCESS: '#27AE60',
-  SHADOW: '#000000',
-  SEARCH_BG: '#F0F3F5',
-  OVERLAY: 'rgba(0, 0, 0, 0.5)',
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+  
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+  
+  GLASS_BG: 'rgba(30, 41, 59, 0.6)',
+  GLASS_BORDER: 'rgba(255, 255, 255, 0.1)',
+  INPUT_BG: 'rgba(15, 23, 42, 0.6)',
+  
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  
+  DANGER: '#FF4757',
+  DANGER_DARK: '#B91C1C',
+  SUCCESS: '#10B981',
+  OVERLAY: 'rgba(15, 23, 42, 0.95)',
 };
 
 const ClinicListScreen = ({ navigation }) => {
@@ -48,31 +55,36 @@ const ClinicListScreen = ({ navigation }) => {
   const [cities, setCities] = useState([]);
   const [selectedCity, setSelectedCity] = useState('all');
   const [showCityFilter, setShowCityFilter] = useState(false);
+
+  // ÇIKIŞ MODAL STATE
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   
-  // Animasyon değeri
+  // Animasyon
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerTitle: 'KLİNİKLER',
+      headerStyle: {
+        backgroundColor: COLORS.BG_START,
+        elevation: 0,
+        shadowOpacity: 0,
+        borderBottomWidth: 0,
+      },
+      headerTintColor: COLORS.TEXT_MAIN,
+      headerTitleStyle: {
+        fontWeight: '800',
+        fontSize: 20,
+        letterSpacing: 1.5,
+      },
+      headerLeft: () => null,
       headerRight: () => (
-        <TouchableOpacity onPress={handleLogout} style={styles.headerButton}>
+        <TouchableOpacity onPress={() => setShowLogoutModal(true)} style={styles.headerButton}>
           <View style={styles.logoutButton}>
-            <Ionicons name="log-out-outline" size={22} color={COLORS.DANGER} />
+            <Ionicons name="power" size={20} color={COLORS.DANGER} />
           </View>
         </TouchableOpacity>
       ),
-      title: 'Klinikler',
-      headerLeft: () => null,
-      headerStyle: {
-        backgroundColor: COLORS.CARD_BG,
-        elevation: 0,
-        shadowOpacity: 0,
-      },
-      headerTitleStyle: {
-        fontWeight: 'bold',
-        fontSize: 20,
-        color: COLORS.TEXT,
-      },
     });
   }, [navigation]);
 
@@ -80,796 +92,370 @@ const ClinicListScreen = ({ navigation }) => {
     fetchClinics();
   }, []);
 
-  // Şehir listesini çıkar
+  // --- GÜNCELLENMİŞ ŞEHİR AYIKLAMA MANTIĞI (Ters Slash Destekli) ---
+  const extractCity = (address) => {
+    if (!address) return null;
+    let cleanCity = '';
+
+    // Regex Açıklaması: /[/\\]/ 
+    // Hem normal slash (/) hem de ters slash (\) karakterinden böler.
+    // Not: Ters slash JS stringinde '\\' olarak ifade edilir.
+    
+    if (address.match(/[/\\]/)) {
+      const parts = address.split(/[/\\]/); // / veya \ görünce böl
+      cleanCity = parts[parts.length - 1].trim(); // En sondaki parçayı al (Şehir)
+    }
+    // Eğer slash yoksa ama virgül varsa
+    else if (address.includes(',')) {
+      const parts = address.split(',');
+      const lastPart = parts[parts.length - 1].trim();
+      
+      // Son parça "Türkiye" ise bir öncekini al
+      if (lastPart.toLowerCase() === 'türkiye' || lastPart.toLowerCase() === 'turkey') {
+        cleanCity = parts[parts.length - 2] ? parts[parts.length - 2].trim() : lastPart;
+      } else {
+        cleanCity = lastPart;
+      }
+    }
+    // Hiçbiri yoksa düz metni al
+    else {
+      cleanCity = address.trim();
+    }
+
+    return cleanCity;
+  };
+
   useEffect(() => {
     if (clinics.length > 0) {
       const uniqueCities = [...new Set(clinics
         .map(clinic => extractCity(clinic.address))
-        .filter(city => city)
+        .filter(city => city && city.length > 2)
       )].sort((a, b) => a.localeCompare(b, 'tr'));
-      
       setCities(uniqueCities);
     }
   }, [clinics]);
 
-  // Şehirden adres çıkarma fonksiyonu
-  const extractCity = (address) => {
-    if (!address) return null;
-    
-    // Örnek: "Konak, İzmir" veya "İzmir, Türkiye" gibi formatlar
-    const parts = address.split(',').map(p => p.trim());
-    
-    // Türkiye kelimesini atla
-    const cityPart = parts.find(p => 
-      p.toLowerCase() !== 'türkiye' && 
-      p.toLowerCase() !== 'turkey' &&
-      p.length > 2
-    );
-    
-    // Eğer virgülle ayrılmışsa son anlamlı kısmı al
-    if (parts.length >= 2) {
-      return parts[parts.length - 1].toLowerCase() !== 'türkiye' 
-        ? parts[parts.length - 1] 
-        : parts[parts.length - 2];
-    }
-    
-    return cityPart || parts[0];
-  };
-
-  // Arama ve şehir filtreleme
   useEffect(() => {
     let filtered = [...clinics];
     
-    // Şehir filtresi
+    // Şehir Filtresi
     if (selectedCity !== 'all') {
       filtered = filtered.filter(clinic => {
-        const clinicCity = extractCity(clinic.address);
-        return clinicCity === selectedCity;
+        const city = extractCity(clinic.address);
+        return city === selectedCity; // Tam eşleşme kontrolü
       });
     }
-    
-    // Arama filtresi
+
+    // Arama Filtresi
     if (searchQuery.trim() !== '') {
       filtered = filtered.filter(clinic =>
         clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (clinic.address && clinic.address.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (clinic.phone && clinic.phone.includes(searchQuery))
+        (clinic.address && clinic.address.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
-    
     setFilteredClinics(filtered);
   }, [searchQuery, selectedCity, clinics]);
 
-  // Fade-in animasyonu
   useEffect(() => {
     if (!loading && clinics.length > 0) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     }
   }, [loading, clinics]);
 
   const fetchClinics = async (isRefreshing = false) => {
-    if (!isRefreshing) {
-      setError(null);
-      setLoading(true);
-    }
-    
+    if (!isRefreshing) { setError(null); setLoading(true); }
     try {
       const clinicsCollection = collection(db, 'clinics');
       const clinicSnapshot = await getDocs(clinicsCollection);
-      
-      const clinicList = clinicSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      
-      // Alfabetik sıralama
+      const clinicList = clinicSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       clinicList.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-      
       setClinics(clinicList);
       setFilteredClinics(clinicList);
-      
     } catch (err) {
-      console.error("Klinikleri çekerken hata:", err);
-      setError("Klinikler yüklenemedi. Lütfen internet bağlantınızı kontrol edin.");
+      setError("Veri bağlantısı kurulamadı.");
     } finally {
       setLoading(false);
       if (isRefreshing) setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchClinics(true);
-  };
+  const handleRefresh = () => { setRefreshing(true); fetchClinics(true); };
 
-  const handleLogout = () => {
-    Alert.alert(
-      "Çıkış Yap",
-      "Oturumunuzu kapatmak istediğinizden emin misiniz?",
-      [
-        { text: "İptal", style: "cancel" },
-        { 
-          text: "Çıkış Yap", 
-          onPress: () => {
-            signOut(auth).catch(err => console.error("Çıkış hatası:", err));
-          },
-          style: "destructive"
-        }
-      ]
-    );
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    signOut(auth).catch(err => console.error("Çıkış hatası:", err));
   };
 
   const handleSelectClinic = (clinic) => {
-    navigation.navigate('Dashboard', {
-      clinicId: clinic.id,
-      clinicName: clinic.name
-    });
+    navigation.navigate('Dashboard', { clinicId: clinic.id, clinicName: clinic.name });
   };
-
-  const clearSearch = () => {
-    setSearchQuery('');
-  };
-
-  const selectCity = (city) => {
-    setSelectedCity(city);
-    setShowCityFilter(false);
-  };
-
-  const clearCityFilter = () => {
-    setSelectedCity('all');
-  };
-
-  // --- RENDER FONKSIYONLARI ---
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.PRIMARY} />
-          <Text style={styles.loadingText}>Klinikler yükleniyor...</Text>
-        </View>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+        <LinearGradient colors={[COLORS.BG_START, COLORS.BG_END]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color={COLORS.ACCENT_START} />
+        <Text style={styles.loadingText}>Sistem Verileri Yükleniyor...</Text>
       </View>
     );
   }
 
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <View style={styles.errorContainer}>
-          <View style={styles.errorIconContainer}>
-            <Ionicons name="alert-circle-outline" size={64} color={COLORS.DANGER} />
-          </View>
-          <Text style={styles.errorTitle}>Bir Hata Oluştu</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchClinics()}>
-            <Ionicons name="refresh-outline" size={20} color={COLORS.CARD_BG} />
-            <Text style={styles.retryButtonText}>Tekrar Dene</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  if (clinics.length === 0) {
-    return (
-      <View style={styles.centerContainer}>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconContainer}>
-            <Ionicons name="business-outline" size={80} color={COLORS.TEXT_MUTED} />
-          </View>
-          <Text style={styles.emptyTitle}>Klinik Bulunamadı</Text>
-          <Text style={styles.emptyText}>Henüz kayıtlı klinik bulunmuyor.</Text>
-        </View>
-      </View>
-    );
-  }
-
-  const renderItem = ({ item, index }) => (
-    <Animated.View 
-      style={[
-        styles.cardWrapper,
-        { 
-          opacity: fadeAnim,
-          transform: [{
-            translateY: fadeAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [20, 0],
-            })
-          }]
-        }
-      ]}
-    >
+  const renderItem = ({ item }) => (
+    <Animated.View style={{ opacity: fadeAnim }}>
       <TouchableOpacity 
-        style={styles.card} 
+        style={styles.cardContainer} 
         onPress={() => handleSelectClinic(item)}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <View style={styles.cardContent}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="medical" size={28} color={COLORS.PRIMARY} />
+        <LinearGradient
+          colors={[COLORS.GLASS_BG, 'rgba(15, 23, 42, 0.4)']}
+          style={styles.glassCard}
+        >
+          <View style={styles.cardIconBox}>
+            <LinearGradient
+              colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+              style={styles.iconGradient}
+            >
+              <Ionicons name="business" size={24} color="#FFF" />
+            </LinearGradient>
           </View>
           
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {item.name}
-            </Text>
-            
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
             {item.address && (
               <View style={styles.infoRow}>
-                <Ionicons name="location-outline" size={16} color={COLORS.TEXT_LIGHT} />
-                <Text style={styles.cardAddress} numberOfLines={2}>
-                  {item.address}
-                </Text>
+                <Ionicons name="location-sharp" size={14} color={COLORS.TEXT_SEC} />
+                <Text style={styles.cardText} numberOfLines={2}>{item.address}</Text>
               </View>
             )}
-            
             {item.phone && (
               <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={16} color={COLORS.TEXT_LIGHT} />
-                <Text style={styles.cardPhone}>{item.phone}</Text>
+                <Ionicons name="call" size={14} color={COLORS.TEXT_SEC} />
+                <Text style={styles.cardText}>{item.phone}</Text>
               </View>
             )}
           </View>
           
-          <View style={styles.arrowContainer}>
-            <Ionicons name="chevron-forward" size={24} color={COLORS.PRIMARY} />
-          </View>
-        </View>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.ACCENT_START} style={{opacity: 0.8}} />
+        </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );
 
-  const ListHeaderComponent = () => (
+  // Bu fonksiyon input focus kaybını önlemek için dışarıda tanımlı değil,
+  // ancak FlatList'e doğrudan fonksiyon çağrısı olarak veriliyor.
+  const renderHeader = () => (
     <View style={styles.headerContainer}>
       <Text style={styles.welcomeText}>Hoş Geldiniz</Text>
-      <Text style={styles.subtitle}>
-        Devam etmek için bir klinik seçin
-      </Text>
+      <Text style={styles.subtitle}>İşlem yapmak istediğiniz kliniği seçin</Text>
       
-      {/* Arama Çubuğu */}
-      <View style={styles.searchContainer}>
-        <Ionicons 
-          name="search-outline" 
-          size={20} 
-          color={COLORS.TEXT_LIGHT} 
-          style={styles.searchIcon}
-        />
+      {/* Arama Alanı */}
+      <View style={styles.searchWrapper}>
+        <Ionicons name="search" size={20} color={COLORS.ACCENT_START} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Klinik ara..."
-          placeholderTextColor={COLORS.TEXT_MUTED}
+          placeholder="Klinik veya semt ara..."
+          placeholderTextColor={COLORS.TEXT_SEC}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-            <Ionicons name="close-circle" size={20} color={COLORS.TEXT_LIGHT} />
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color={COLORS.TEXT_SEC} />
           </TouchableOpacity>
         )}
       </View>
 
       {/* Şehir Filtresi */}
       {cities.length > 0 && (
-        <View style={styles.filterSection}>
+        <View style={styles.filterRow}>
           <TouchableOpacity 
-            style={styles.cityFilterButton}
+            style={[styles.filterBtn, selectedCity !== 'all' && styles.filterBtnActive]}
             onPress={() => setShowCityFilter(true)}
-            activeOpacity={0.7}
           >
-            <Ionicons name="location" size={18} color={COLORS.PRIMARY} />
-            <Text style={styles.cityFilterText}>
-              {selectedCity === 'all' ? 'Tüm Şehirler' : selectedCity}
+            <Ionicons name="map" size={16} color={selectedCity !== 'all' ? '#FFF' : COLORS.ACCENT_START} />
+            <Text style={[styles.filterBtnText, selectedCity !== 'all' && {color:'#FFF'}]}>
+              {selectedCity === 'all' ? 'Konum Filtrele' : selectedCity}
             </Text>
-            <Ionicons name="chevron-down" size={18} color={COLORS.TEXT_LIGHT} />
+            <Ionicons name="chevron-down" size={16} color={selectedCity !== 'all' ? '#FFF' : COLORS.TEXT_SEC} />
           </TouchableOpacity>
 
           {selectedCity !== 'all' && (
-            <TouchableOpacity 
-              style={styles.clearFilterButton}
-              onPress={clearCityFilter}
-            >
-              <Ionicons name="close" size={16} color={COLORS.CARD_BG} />
+            <TouchableOpacity onPress={() => setSelectedCity('all')} style={styles.clearFilterBtn}>
+              <Ionicons name="refresh" size={18} color={COLORS.TEXT_SEC} />
             </TouchableOpacity>
           )}
         </View>
       )}
 
-      {/* Sonuç Sayacı */}
-      <View style={styles.resultContainer}>
-        <Text style={styles.resultText}>
-          {filteredClinics.length} klinik bulundu
-        </Text>
-        {selectedCity !== 'all' && (
-          <View style={styles.activeFilterBadge}>
-            <Text style={styles.activeFilterText}>{selectedCity}</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-
-  const ListEmptyComponent = () => (
-    <View style={styles.emptySearchContainer}>
-      <Ionicons name="search-outline" size={60} color={COLORS.TEXT_MUTED} />
-      <Text style={styles.emptySearchText}>
-        Sonuç bulunamadı
-      </Text>
-      <Text style={styles.emptySearchSubtext}>
-        {searchQuery && `"${searchQuery}" için `}
-        {selectedCity !== 'all' && `${selectedCity} şehrinde `}
-        klinik bulunamadı
-      </Text>
-      {(searchQuery || selectedCity !== 'all') && (
-        <TouchableOpacity 
-          style={styles.resetFiltersButton}
-          onPress={() => {
-            setSearchQuery('');
-            setSelectedCity('all');
-          }}
-        >
-          <Text style={styles.resetFiltersText}>Filtreleri Temizle</Text>
-        </TouchableOpacity>
-      )}
+      <Text style={styles.resultCount}>{filteredClinics.length} Klinik Bulundu</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <FlatList
-        data={filteredClinics}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-      />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+      
+      <LinearGradient colors={[COLORS.BG_START, COLORS.BG_END]} style={StyleSheet.absoluteFillObject} />
+      
+      <View style={styles.glowTop} />
+      <View style={styles.glowBottom} />
+
+      <SafeAreaView style={{flex: 1}}>
+        <FlatList
+          data={filteredClinics}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={renderHeader()}
+          showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          ListEmptyComponent={
+            !loading && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="planet-outline" size={60} color={COLORS.TEXT_SEC} />
+                <Text style={styles.emptyText}>Kriterlere uygun klinik bulunamadı.</Text>
+              </View>
+            )
+          }
+        />
+      </SafeAreaView>
 
       {/* Şehir Seçim Modal */}
-      <Modal
-        visible={showCityFilter}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCityFilter(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCityFilter(false)}
-        >
+      <Modal visible={showCityFilter} transparent animationType="fade" onRequestClose={() => setShowCityFilter(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCityFilter(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Şehir Seçin</Text>
+              <Text style={styles.modalTitle}>KONUM SEÇİN</Text>
               <TouchableOpacity onPress={() => setShowCityFilter(false)}>
-                <Ionicons name="close" size={28} color={COLORS.TEXT} />
+                <Ionicons name="close" size={24} color={COLORS.TEXT_SEC} />
               </TouchableOpacity>
             </View>
-
-            <ScrollView style={styles.cityList}>
-              <TouchableOpacity 
-                style={[
-                  styles.cityOption,
-                  selectedCity === 'all' && styles.cityOptionSelected
-                ]}
-                onPress={() => selectCity('all')}
-              >
-                <Ionicons 
-                  name="globe-outline" 
-                  size={22} 
-                  color={selectedCity === 'all' ? COLORS.PRIMARY : COLORS.TEXT_LIGHT} 
-                />
-                <Text style={[
-                  styles.cityOptionText,
-                  selectedCity === 'all' && styles.cityOptionTextSelected
-                ]}>
-                  Tüm Şehirler
-                </Text>
-                {selectedCity === 'all' && (
-                  <Ionicons name="checkmark-circle" size={24} color={COLORS.PRIMARY} />
-                )}
+            <ScrollView>
+              <TouchableOpacity style={styles.cityOption} onPress={() => { setSelectedCity('all'); setShowCityFilter(false); }}>
+                <Text style={[styles.cityText, selectedCity === 'all' && styles.cityTextActive]}>Tüm Şehirler</Text>
+                {selectedCity === 'all' && <Ionicons name="checkmark" size={20} color={COLORS.ACCENT_START} />}
               </TouchableOpacity>
-
               {cities.map((city, index) => (
-                <TouchableOpacity 
-                  key={index}
-                  style={[
-                    styles.cityOption,
-                    selectedCity === city && styles.cityOptionSelected
-                  ]}
-                  onPress={() => selectCity(city)}
-                >
-                  <Ionicons 
-                    name="location" 
-                    size={22} 
-                    color={selectedCity === city ? COLORS.PRIMARY : COLORS.TEXT_LIGHT} 
-                  />
-                  <Text style={[
-                    styles.cityOptionText,
-                    selectedCity === city && styles.cityOptionTextSelected
-                  ]}>
-                    {city}
-                  </Text>
-                  {selectedCity === city && (
-                    <Ionicons name="checkmark-circle" size={24} color={COLORS.PRIMARY} />
-                  )}
+                <TouchableOpacity key={index} style={styles.cityOption} onPress={() => { setSelectedCity(city); setShowCityFilter(false); }}>
+                  <Text style={[styles.cityText, selectedCity === city && styles.cityTextActive]}>{city}</Text>
+                  {selectedCity === city && <Ionicons name="checkmark" size={20} color={COLORS.ACCENT_START} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+
+      {/* ÇIKIŞ MODALI */}
+      <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>
+        <View style={styles.logoutOverlay}>
+          <LinearGradient colors={[COLORS.BG_END, COLORS.BG_START]} style={styles.logoutCard}>
+            
+            <View style={styles.logoutIconContainer}>
+              <Ionicons name="power" size={32} color={COLORS.DANGER} />
+            </View>
+
+            <Text style={styles.logoutTitle}>SİSTEMDEN ÇIKIŞ</Text>
+            <Text style={styles.logoutMessage}>Oturumu kapatmak istiyor musunuz?</Text>
+
+            <View style={styles.logoutBtnRow}>
+              <TouchableOpacity style={styles.logoutBtnCancel} onPress={() => setShowLogoutModal(false)}>
+                <Text style={styles.logoutBtnTextCancel}>İPTAL</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.logoutBtnConfirm} onPress={confirmLogout}>
+                <LinearGradient colors={[COLORS.DANGER, COLORS.DANGER_DARK]} style={styles.logoutBtnGradient}>
+                  <Text style={styles.logoutBtnTextConfirm}>ÇIKIŞ YAP</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+          </LinearGradient>
+        </View>
+      </Modal>
+
+    </View>
   );
 };
 
-// --- GELİŞTİRİLMİŞ STİLLER ---
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
-  },
-  listContainer: {
-    paddingBottom: 20,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND,
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: COLORS.BG_START },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.BG_START },
   
-  // Header Stilleri
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    marginBottom: 20,
-  },
-  
-  // Arama Stilleri
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.SEARCH_BG,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 15,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.TEXT,
-  },
-  clearButton: {
-    padding: 5,
-  },
+  glowTop: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_START, opacity: 0.1, transform: [{ scale: 1.2 }] },
+  glowBottom: { position: 'absolute', bottom: -50, left: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_END, opacity: 0.1 },
 
-  // Şehir Filtresi
-  filterSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  cityFilterButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.CARD_BG,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.PRIMARY,
-  },
-  cityFilterText: {
-    flex: 1,
-    fontSize: 15,
-    color: COLORS.TEXT,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  clearFilterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: COLORS.DANGER,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  
-  resultContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 5,
-    marginBottom: 10,
-  },
-  resultText: {
-    fontSize: 14,
-    color: COLORS.TEXT_LIGHT,
-    fontWeight: '500',
-  },
-  activeFilterBadge: {
-    backgroundColor: COLORS.PRIMARY + '20',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 10,
-  },
-  activeFilterText: {
-    fontSize: 12,
-    color: COLORS.PRIMARY,
-    fontWeight: '600',
-  },
-  
-  // Kart Stilleri
-  cardWrapper: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  card: {
-    backgroundColor: COLORS.CARD_BG,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: COLORS.SHADOW,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER,
-  },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: COLORS.PRIMARY + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  textContainer: {
-    flex: 1,
-    marginRight: 10,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  cardAddress: {
-    fontSize: 14,
-    color: COLORS.TEXT_LIGHT,
-    marginLeft: 6,
-    flex: 1,
-  },
-  cardPhone: {
-    fontSize: 14,
-    color: COLORS.TEXT_LIGHT,
-    marginLeft: 6,
-    fontWeight: '500',
-  },
-  arrowContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: COLORS.PRIMARY + '10',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  
-  // Yükleme Stilleri
-  loadingContainer: {
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-  },
-  
-  // Hata Stilleri
-  errorContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  errorIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.DANGER + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  errorTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 22,
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 30,
-    paddingVertical: 14,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: COLORS.SHADOW,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  retryButtonText: {
-    color: COLORS.CARD_BG,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  
-  // Boş Liste Stilleri
-  emptyContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: COLORS.SEARCH_BG,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: COLORS.TEXT_LIGHT,
-    textAlign: 'center',
-  },
-  
-  // Boş Arama Sonucu
-  emptySearchContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptySearchText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT,
-    textAlign: 'center',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptySearchSubtext: {
-    fontSize: 15,
-    color: COLORS.TEXT_LIGHT,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  resetFiltersButton: {
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 10,
-  },
-  resetFiltersText: {
-    color: COLORS.CARD_BG,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  
-  // Header Button
-  headerButton: {
-    marginRight: 10,
-  },
-  logoutButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: COLORS.DANGER + '10',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  headerButton: { marginRight: 15 },
+  logoutButton: { padding: 8, backgroundColor: 'rgba(255, 71, 87, 0.15)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 71, 87, 0.3)' },
 
-  // Modal Stilleri
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: COLORS.OVERLAY,
-    justifyContent: 'flex-end',
+  listContent: { paddingBottom: 30 },
+  
+  headerContainer: { padding: 20, paddingTop: 10 },
+  welcomeText: { fontSize: 28, fontWeight: '800', color: COLORS.TEXT_MAIN, letterSpacing: 0.5 },
+  subtitle: { fontSize: 14, color: COLORS.TEXT_SEC, marginBottom: 20 },
+
+  searchWrapper: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.INPUT_BG,
+    borderRadius: 16, paddingHorizontal: 15, height: 56, borderWidth: 1, borderColor: COLORS.GLASS_BORDER, marginBottom: 15
   },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, color: COLORS.TEXT_MAIN, fontSize: 16 },
+
+  filterRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  filterBtn: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, borderWidth: 1, borderColor: COLORS.GLASS_BORDER
+  },
+  filterBtnActive: { backgroundColor: COLORS.ACCENT_START, borderColor: COLORS.ACCENT_START },
+  filterBtnText: { color: COLORS.TEXT_SEC, fontSize: 14, fontWeight: '600', marginHorizontal: 8 },
+  clearFilterBtn: { marginLeft: 10, padding: 10 },
+
+  resultCount: { color: COLORS.TEXT_SEC, fontSize: 12, fontWeight: 'bold', marginLeft: 5, marginTop: 5, letterSpacing: 1 },
+
+  cardContainer: { paddingHorizontal: 20, marginBottom: 12 },
+  glassCard: {
+    flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.GLASS_BORDER, overflow: 'hidden'
+  },
+  cardIconBox: {
+    width: 50, height: 50, borderRadius: 16, marginRight: 15,
+    shadowColor: COLORS.ACCENT_START, shadowOpacity: 0.3, shadowRadius: 10
+  },
+  iconGradient: { flex: 1, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  cardContent: { flex: 1 },
+  cardTitle: { fontSize: 17, fontWeight: '700', color: COLORS.TEXT_MAIN, marginBottom: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  cardText: { fontSize: 13, color: COLORS.TEXT_SEC, marginLeft: 6, flex: 1 },
+
+  modalOverlay: { flex: 1, backgroundColor: COLORS.OVERLAY, justifyContent: 'center', padding: 20 },
   modalContent: {
-    backgroundColor: COLORS.CARD_BG,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '70%',
-    paddingBottom: 20,
+    backgroundColor: '#1E293B', borderRadius: 24, padding: 20, maxHeight: '60%',
+    borderWidth: 1, borderColor: COLORS.GLASS_BORDER
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-  },
-  cityList: {
-    maxHeight: 400,
-  },
-  cityOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
-  },
-  cityOptionSelected: {
-    backgroundColor: COLORS.PRIMARY + '10',
-  },
-  cityOptionText: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.TEXT,
-    marginLeft: 12,
-    fontWeight: '500',
-  },
-  cityOptionTextSelected: {
-    color: COLORS.PRIMARY,
-    fontWeight: 'bold',
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  modalTitle: { color: COLORS.TEXT_MAIN, fontSize: 16, fontWeight: '800', letterSpacing: 1 },
+  cityOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  cityText: { color: COLORS.TEXT_SEC, fontSize: 16 },
+  cityTextActive: { color: COLORS.ACCENT_START, fontWeight: 'bold' },
+
+  loadingText: { color: COLORS.TEXT_SEC, marginTop: 15 },
+  emptyContainer: { alignItems: 'center', marginTop: 50 },
+  emptyText: { color: COLORS.TEXT_SEC, marginTop: 15 },
+
+  logoutOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 30 },
+  logoutCard: { width: '100%', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: COLORS.GLASS_BORDER, shadowColor: COLORS.DANGER, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10 },
+  logoutIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 71, 87, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255, 71, 87, 0.3)' },
+  logoutTitle: { fontSize: 20, fontWeight: '900', color: COLORS.TEXT_MAIN, marginBottom: 8, letterSpacing: 1 },
+  logoutMessage: { fontSize: 14, color: COLORS.TEXT_SEC, textAlign: 'center', marginBottom: 24 },
+  logoutBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  logoutBtnCancel: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: COLORS.GLASS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  logoutBtnTextCancel: { color: COLORS.TEXT_MAIN, fontWeight: '700', fontSize: 13 },
+  logoutBtnConfirm: { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  logoutBtnGradient: { paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
+  logoutBtnTextConfirm: { color: '#FFF', fontWeight: 'bold', fontSize: 13, letterSpacing: 0.5 }
 });
 
 export default ClinicListScreen;

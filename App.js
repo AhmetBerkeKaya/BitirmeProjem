@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StatusBar, View } from 'react-native'; // <--- DİKKAT: 'View' buraya eklendi
+import { StatusBar, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebaseConfig';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// --- CHATBOT BİLEŞENİNİ ÇAĞIRIYORUZ ---
+// --- CHATBOT BİLEŞENİ ---
 import ChatWidget from './components/ChatWidget';
 
-// --- YENİ RENK PALETİMİZ ---
+// --- RENK PALETİ ---
 const COLORS = {
   PRIMARY: '#00BFA6',
   BACKGROUND: '#F5F9FC',
@@ -18,7 +19,7 @@ const COLORS = {
   BORDER: '#EAECEE',
 };
 
-// --- EKRAN İMPORTLARI ---
+// --- EKRANLAR ---
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import ClinicListScreen from './screens/ClinicListScreen';
@@ -55,21 +56,14 @@ const globalScreenOptions = {
 
 const AuthStack = () => (
   <Stack.Navigator>
-    <Stack.Screen
-      name="Login"
-      component={LoginScreen}
-      options={{ headerShown: false }}
-    />
-    <Stack.Screen
-      name="SignUp"
-      component={SignUpScreen}
-      options={{ headerShown: false }}
-    />
+    <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="SignUp" component={SignUpScreen} options={{ headerShown: false }} />
   </Stack.Navigator>
 );
 
 const AppStack = () => (
   <Stack.Navigator screenOptions={globalScreenOptions}>
+    {/* 🔥 'name' değerleri buradaki stringlerdir. 'ClinicList' burada tanımlı. */}
     <Stack.Screen name="ClinicList" component={ClinicListScreen} options={{ title: 'Klinik Seçin' }} />
     <Stack.Screen name="Dashboard" component={DashboardScreen} />
     <Stack.Screen name="DepartmentList" component={DepartmentListScreen} />
@@ -82,9 +76,22 @@ const AppStack = () => (
   </Stack.Navigator>
 );
 
+// 🔥 YARDIMCI FONKSİYON: Şu an hangi sayfadayız?
+const getActiveRouteName = (state) => {
+  if (!state || !state.routes) return 'Unknown';
+  const route = state.routes[state.index];
+  if (route.state) {
+    return getActiveRouteName(route.state);
+  }
+  return route.name;
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
+  
+  // 🔥 EKRAN İSMİNİ TUTAN STATE
+  const [currentRouteName, setCurrentRouteName] = useState('ClinicList'); // Başlangıç varsayılanı
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -101,20 +108,27 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
+    <SafeAreaProvider>
+      <NavigationContainer
+        // 🔥 NAVİGASYON DEĞİŞİKLİĞİNİ DİNLE
+        onStateChange={(state) => {
+          const routeName = getActiveRouteName(state);
+          console.log("Aktif Ekran:", routeName); // Konsoldan kontrol edebilirsin
+          setCurrentRouteName(routeName);
+        }}
+      >
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
 
-      {user ? (
-        // --- DEĞİŞİKLİK BURADA ---
-        // Navigasyon ve Chatbot'u aynı kapsayıcı (View) içine alıyoruz.
-        // flex: 1 demezsek ekran boş görünür.
-        <View style={{ flex: 1 }}>
-          <AppStack />
-          <ChatWidget />
-        </View>
-      ) : (
-        <AuthStack />
-      )}
-    </NavigationContainer>
+        {user ? (
+          <View style={{ flex: 1 }}>
+            <AppStack />
+            {/* 🔥 CHATBOT KONTROLÜ: Eğer ekran 'ClinicList' ise visible=false yap */}
+            <ChatWidget visible={currentRouteName !== 'ClinicList'} />
+          </View>
+        ) : (
+          <AuthStack />
+        )}
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

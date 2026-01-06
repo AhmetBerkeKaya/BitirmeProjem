@@ -1,150 +1,188 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal,
-  TextInput, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image
+  TextInput, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Animated, Easing, Dimensions, LayoutAnimation, UIManager
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebaseConfig'; 
+import { LinearGradient } from 'expo-linear-gradient';
 
-// 🔥 Navigasyon Haritası (Senin App.js'in ile uyumlu)
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
+
+const { width } = Dimensions.get('window');
+
+// --- TEMA RENKLERİ ---
+const COLORS = {
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+  GLASS_BG: 'rgba(30, 41, 59, 0.85)',
+  GLASS_BORDER: 'rgba(255, 255, 255, 0.1)',
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  MED_COLOR: '#F43F5E',
+  TREAT_COLOR: '#A855F7',
+  APPT_COLOR: '#F59E0B',
+  DOC_COLOR: '#00F2C3',
+  DANGER: '#EF4444',
+};
+
 const SCREEN_MAPPING = {
   'AppointmentScreen': 'Appointment',
   'PastAppointmentsScreen': 'PastAppointmentsScreen',
-  'TreatmentListScreen': 'TreatmentListScreen', // Eğer varsa
-  'PrescriptionListScreen': 'PrescriptionListScreen' // Eğer varsa
+  'TreatmentListScreen': 'TreatmentListScreen',
+  'PrescriptionListScreen': 'PrescriptionListScreen'
 };
 
-const MessageBubble = ({ text, isUser, type, data, options, onOptionPress }) => {
+// --- YARDIMCI BİLEŞENLER ---
+
+const TypingIndicator = () => {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animate = (dot, delay) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dot, { toValue: -6, duration: 400, useNativeDriver: true, delay }),
+          Animated.timing(dot, { toValue: 0, duration: 400, useNativeDriver: true })
+        ])
+      ).start();
+    };
+    animate(dot1, 0);
+    animate(dot2, 200);
+    animate(dot3, 400);
+  }, []);
+
+  return (
+    <View style={styles.typingContainer}>
+      <View style={styles.botAvatarSmall}>
+        <Ionicons name="sparkles" size={12} color="#FFF" />
+      </View>
+      <View style={styles.typingBubble}>
+        <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]} />
+        <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]} />
+        <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot3 }] }]} />
+      </View>
+    </View>
+  );
+};
+
+const AnimatedBubble = ({ children, isUser }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 6, useNativeDriver: true })
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], alignItems: isUser ? 'flex-end' : 'flex-start', marginVertical: 8 }}>
+      {children}
+    </Animated.View>
+  );
+};
+
+const PulsingAvatar = () => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.1, duration: 1000, easing: Easing.ease, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1, duration: 1000, easing: Easing.ease, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <View style={styles.headerAvatarContainer}>
+      <Animated.View style={[styles.headerAvatarGlow, { transform: [{ scale: scaleAnim }] }]} />
+      <View style={styles.headerAvatar}>
+        <Ionicons name="chatbubbles" size={20} color="#FFF" />
+      </View>
+      <View style={styles.onlineDot} />
+    </View>
+  );
+};
+
+const MessageContent = ({ text, isUser, type, data, options, onOptionPress }) => {
   return (
     <View style={{ alignItems: isUser ? 'flex-end' : 'flex-start', marginVertical: 8 }}>
-      {/* Balon */}
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
-        <Text style={isUser ? styles.userText : styles.botText}>{text}</Text>
-      </View>
-
-      {/* --- KARTLAR BÖLÜMÜ --- */}
-
-      {/* 1. İLAÇ KARTLARI (MEDICATION) */}
-      {!isUser && type === 'MEDICATION_LIST' && data && (
-        <View style={styles.cardContainer}>
-          {data.map((med, index) => (
-            <View key={index} style={[styles.infoCard, { borderLeftColor: '#E91E63' }]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconCircle, {backgroundColor: '#FCE4EC'}]}>
-                   <Ionicons name="medkit" size={20} color="#E91E63" />
-                </View>
-                <View style={{flex:1}}>
-                    <Text style={styles.cardTitle}>{med.name}</Text>
-                    <Text style={styles.cardSubtitle}>{med.dosage}</Text>
-                </View>
-              </View>
-              {/* Halk Dili Açıklaması */}
-              <View style={styles.explanationBox}>
-                 <Text style={styles.explanationText}>ℹ️ {med.description}</Text>
-              </View>
-            </View>
-          ))}
+      {isUser ? (
+        <LinearGradient colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]} start={{x:0, y:0}} end={{x:1, y:1}} style={[styles.bubble, styles.userBubble]}>
+          <Text style={styles.userText}>{text}</Text>
+        </LinearGradient>
+      ) : (
+        <View style={[styles.bubble, styles.botBubble]}>
+          <Text style={styles.botText}>{text}</Text>
         </View>
       )}
 
-      {/* 2. TEDAVİ KARTLARI (TREATMENT) */}
-      {!isUser && type === 'TREATMENT_LIST' && data && (
+      {!isUser && data && (
         <View style={styles.cardContainer}>
-          {data.map((treat, index) => (
-            <View key={index} style={[styles.infoCard, { borderLeftColor: '#9C27B0' }]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconCircle, {backgroundColor: '#F3E5F5'}]}>
-                   <Ionicons name="fitness" size={20} color="#9C27B0" />
-                </View>
-                <View style={{flex:1}}>
-                    <Text style={styles.cardTitle}>{treat.name}</Text>
-                    <Text style={styles.cardSubtitle}>Faz: {treat.phase}</Text>
-                </View>
-              </View>
-              <Text style={styles.cardBodyText}>{treat.description}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+          {data.map((item, index) => {
+            let borderColor = COLORS.ACCENT_START;
+            let icon = "information-circle";
+            let title = item.name || item.branch || item.fullName;
+            let sub = item.dosage || item.date || item.specialization;
+            let desc = item.description || item.doctor || item.hospital;
 
-      {/* 3. RANDEVU KARTLARI (APPOINTMENT) */}
-      {!isUser && type === 'APPOINTMENT_LIST' && data && (
-        <View style={styles.cardContainer}>
-          {data.map((app, index) => (
-            <View key={index} style={[styles.infoCard, { borderLeftColor: '#FF9800' }]}>
-               <View style={styles.cardHeader}>
-                  <View style={[styles.iconCircle, {backgroundColor: '#FFF3E0'}]}>
-                     <Ionicons name="calendar" size={20} color="#FF9800" />
+            if (type === 'MEDICATION_LIST') { borderColor = COLORS.MED_COLOR; icon = "medkit"; }
+            else if (type === 'TREATMENT_LIST') { borderColor = COLORS.TREAT_COLOR; icon = "fitness"; sub = `Faz: ${item.phase}`; }
+            else if (type === 'APPOINTMENT_LIST') { borderColor = COLORS.APPT_COLOR; icon = "calendar"; desc = `Dr. ${item.doctor}`; }
+            else if (type === 'DOCTOR_LIST') { borderColor = COLORS.DOC_COLOR; icon = "person"; desc = item.hospital; }
+
+            return (
+              <LinearGradient key={index} colors={[COLORS.GLASS_BG, 'rgba(255,255,255,0.05)']} style={[styles.infoCard, { borderLeftColor: borderColor }]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.iconCircle, { backgroundColor: borderColor + '20' }]}>
+                     <Ionicons name={icon} size={18} color={borderColor} />
                   </View>
                   <View style={{flex:1}}>
-                      <Text style={styles.cardTitle}>{app.branch}</Text>
-                      <Text style={styles.cardSubtitle}>{app.date}</Text>
+                      <Text style={styles.cardTitle}>{title}</Text>
+                      <Text style={styles.cardSubtitle}>{sub}</Text>
                   </View>
-               </View>
-               <View style={styles.detailRow}>
-                 <Ionicons name="person-outline" size={14} color="#666" />
-                 <Text style={styles.detailText}>Dr. {app.doctor}</Text>
-               </View>
-               <View style={styles.detailRow}>
-                 <Ionicons name="business-outline" size={14} color="#666" />
-                 <Text style={styles.detailText}>{app.clinic}</Text>
-               </View>
-               <View style={[styles.statusBadge, app.status === 'completed' ? styles.badgeSuccess : styles.badgePending]}>
-                 <Text style={app.status === 'completed' ? styles.textSuccess : styles.textPending}>
-                   {app.status === 'confirmed' ? 'Onaylandı' : app.status === 'pending' ? 'Bekliyor' : 'Tamamlandı'}
-                 </Text>
-               </View>
-            </View>
-          ))}
+                </View>
+                {desc && <Text style={styles.cardBodyText}>{desc}</Text>}
+                
+                {type === 'DOCTOR_LIST' && (
+                  <TouchableOpacity 
+                    style={styles.miniBtn} 
+                    onPress={() => onOptionPress({
+                      action: 'NAVIGATE_DIRECT', screen: 'AppointmentScreen',
+                      params: { doctorId: item.id, clinicId: item.clinicId, branch: item.specialization, doctorName: item.fullName, clinicName: item.hospital }
+                    })}
+                  >
+                     <Text style={styles.miniBtnText}>Randevu Al</Text>
+                  </TouchableOpacity>
+                )}
+              </LinearGradient>
+            );
+          })}
         </View>
       )}
 
-      {/* 4. DOKTOR KARTLARI (DOCTOR) */}
-      {!isUser && type === 'DOCTOR_LIST' && data && (
-        <View style={styles.cardContainer}>
-          {data.map((doc, index) => (
-            <View key={index} style={[styles.infoCard, { borderLeftColor: '#00BFA6' }]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.iconCircle, {backgroundColor: '#E0F2F1'}]}>
-                   <Ionicons name="person" size={20} color="#00BFA6" />
-                </View>
-                <View style={{flex:1}}>
-                    <Text style={styles.cardTitle}>{doc.fullName}</Text>
-                    <Text style={styles.cardSubtitle}>{doc.specialization}</Text>
-                </View>
-              </View>
-              <Text style={styles.cardBodyText}>🏥 {doc.hospital}</Text>
-              
-              <TouchableOpacity 
-                style={styles.actionButton} 
-                onPress={() => onOptionPress({
-                  action: 'NAVIGATE_DIRECT', 
-                  screen: 'AppointmentScreen',
-                  params: { 
-                    doctorId: doc.id, 
-                    clinicId: doc.clinicId, 
-                    branch: doc.specialization, 
-                    doctorName: doc.fullName,
-                    clinicName: doc.hospital 
-                  }
-                })}
-              >
-                 <Text style={styles.actionButtonText}>📅 Randevu Al</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* SEÇENEK BUTONLARI */}
       {!isUser && options && options.length > 0 && (
         <View style={styles.optionsContainer}>
           {options.map((opt, index) => (
-            <TouchableOpacity key={index} style={styles.optionButton} onPress={() => onOptionPress(opt)}>
-              <Text style={styles.optionText}>{opt.label}</Text>
+            <TouchableOpacity key={index} activeOpacity={0.7} onPress={() => onOptionPress(opt)}>
+              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']} style={styles.optionButton}>
+                <Text style={styles.optionText}>{opt.label}</Text>
+              </LinearGradient>
             </TouchableOpacity>
           ))}
         </View>
@@ -153,17 +191,20 @@ const MessageBubble = ({ text, isUser, type, data, options, onOptionPress }) => 
   );
 };
 
-export default function ChatWidget() {
+// --- ANA COMPONENT ---
+export default function ChatWidget({ visible = true }) {
+  // 1. ÖNCE TÜM HOOK'LAR TANIMLANMALI (Sıralama Değişmemeli)
   const [isVisible, setIsVisible] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const navigation = useNavigation(); 
+  const insets = useSafeAreaInsets(); 
 
   const INITIAL_MESSAGE = { 
     id: 'init', 
-    text: 'Merhaba! Ben Klinik Asistanı. İlaçlarınızı, tedavilerinizi veya randevularınızı sorabilirsiniz.', 
-    isUser: false, 
-    type: 'TEXT',
+    text: 'Merhaba! Ben RTM Asistan. Size nasıl yardımcı olabilirim?', 
+    isUser: false, type: 'TEXT',
     options: [
       { label: '💊 İlaçlarım', action: 'İlaçlarımı göster' },
       { label: '📋 Tedavilerim', action: 'Tedavi planımı göster' },
@@ -175,11 +216,25 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const flatListRef = useRef(null);
 
-  const handleCloseChat = () => {
-    Alert.alert("Sohbeti Kapat", "Sohbet geçmişini temizlemek ister misiniz?", [
-        { text: "Hayır, Kalsın", onPress: () => setIsVisible(false), style: "cancel" },
-        { text: "Evet, Temizle", style: "destructive", onPress: () => { setIsVisible(false); setTimeout(() => setMessages([INITIAL_MESSAGE]), 300); } }
-    ]);
+  // 2. EFFECT HOOK'U (Bu da render'dan önce olmalı)
+  useEffect(() => {
+    if(isVisible) setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [messages, isTyping, isVisible]);
+
+  // 🔥🔥🔥 3. GÜVENLİ EARLY RETURN (Tüm Hook'lardan Sonra) 🔥🔥🔥
+  if (!visible) return null;
+
+  // --- Yardımcı Fonksiyonlar ---
+  const handleCloseChatRequest = () => {
+    setShowCloseModal(true);
+  };
+
+  const handleConfirmClose = (shouldClear) => {
+    setShowCloseModal(false);
+    setIsVisible(false);
+    if (shouldClear) {
+      setTimeout(() => setMessages([INITIAL_MESSAGE]), 300);
+    }
   };
 
   const handleBotResponse = async (userText) => {
@@ -190,12 +245,12 @@ export default function ChatWidget() {
       const { text, data, type, options } = result.data;
       addMessage(text, false, type, data, options);
     } catch (error) {
-      console.error("AI Hatası:", error);
-      addMessage("Bağlantı hatası oluştu. Lütfen tekrar deneyin.", false, "ERROR", null, [{label: "Tekrar Dene", action: userText}]);
+      addMessage("Bağlantı hatası.", false, "ERROR", null, [{label: "Tekrar Dene", action: userText}]);
     } finally { setIsTyping(false); }
   };
 
   const addMessage = (text, isUser, type = 'TEXT', data = null, options = null) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setMessages(prev => [...prev, { id: Date.now().toString(), text, isUser, type, data, options }]);
   };
 
@@ -207,99 +262,167 @@ export default function ChatWidget() {
   };
 
   const handleOptionPress = (option) => {
-    // Navigasyon kontrolü
     if (option.action === 'NAVIGATE_DIRECT') {
         setIsVisible(false);
         const target = SCREEN_MAPPING[option.screen] || option.screen;
-        try { navigation.navigate(target, option.params); } catch(e) { Alert.alert("Hata", "Sayfa bulunamadı."); }
+        try { navigation.navigate(target, option.params); } catch(e) {}
         return;
     }
-    // Normal mesaj gönderme
     sendMessage(option.action); 
   };
-
-  useEffect(() => flatListRef.current?.scrollToEnd({ animated: true }), [messages, isTyping]);
 
   return (
     <>
       {!isVisible && (
-        <TouchableOpacity style={styles.fab} onPress={() => setIsVisible(true)}>
-          <Ionicons name="chatbubbles" size={30} color="#FFF" />
+        <TouchableOpacity style={styles.fabWrapper} onPress={() => setIsVisible(true)} activeOpacity={0.8}>
+          <View style={styles.fabContainer}>
+            <LinearGradient colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]} style={styles.fab}>
+              <Ionicons name="chatbubbles" size={28} color="#FFF" />
+            </LinearGradient>
+            <View style={styles.fabPulse} />
+          </View>
         </TouchableOpacity>
       )}
 
-      <Modal visible={isVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseChat}>
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>RTM Asistan 🤖</Text>
-            <TouchableOpacity onPress={handleCloseChat}><Ionicons name="close-circle" size={32} color="#333" /></TouchableOpacity>
-          </View>
-
-          <FlatList
-            ref={flatListRef} data={messages} keyExtractor={item => item.id}
-            renderItem={({ item }) => <MessageBubble {...item} onOptionPress={handleOptionPress} />}
-            contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
-            ListFooterComponent={isTyping ? <ActivityIndicator size="small" color="#00BFA6" style={{marginTop:10}} /> : null}
-          />
-
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
-            <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="Bir şeyler yazın..." value={inputText} onChangeText={setInputText} onSubmitEditing={() => sendMessage(inputText)} />
-              <TouchableOpacity onPress={() => sendMessage(inputText)} style={styles.sendButton}><Ionicons name="send" size={20} color="#FFF" /></TouchableOpacity>
+      {/* ANA SOHBET MODALI */}
+      <Modal visible={isVisible} animationType="slide" transparent={true} onRequestClose={handleCloseChatRequest}>
+        <View style={styles.modalContainer}>
+          <LinearGradient 
+            colors={[COLORS.BG_START, COLORS.BG_END]} 
+            style={[styles.modalGradient, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}
+          >
+            {/* Header */}
+            <View style={[styles.header, { marginTop: Platform.OS === 'ios' ? 10 : 0 }]}>
+              <View style={styles.headerTitleRow}>
+                <PulsingAvatar />
+                <View style={{marginLeft: 12}}>
+                  <Text style={styles.headerTitle}>RTM ASİSTAN</Text>
+                  <Text style={styles.headerSubtitle}>Çevrimiçi • Yapay Zeka</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={handleCloseChatRequest} style={styles.closeBtn} activeOpacity={0.7} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+                <Ionicons name="close" size={24} color={COLORS.TEXT_SEC} />
+              </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+
+            {/* Sohbet */}
+            <FlatList
+              ref={flatListRef} data={messages} keyExtractor={item => item.id}
+              renderItem={({ item }) => <AnimatedBubble isUser={item.isUser}><MessageContent {...item} onOptionPress={handleOptionPress} /></AnimatedBubble>}
+              contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
+              showsVerticalScrollIndicator={false}
+              ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+            />
+
+            {/* Input */}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              <View style={styles.inputWrapper}>
+                <View style={styles.inputContainer}>
+                  <TextInput 
+                    style={styles.input} placeholder="Bir şeyler yazın..." placeholderTextColor={COLORS.TEXT_SEC}
+                    value={inputText} onChangeText={setInputText} onSubmitEditing={() => sendMessage(inputText)} 
+                  />
+                  <TouchableOpacity onPress={() => sendMessage(inputText)} disabled={!inputText.trim()} style={[styles.sendButton, !inputText.trim() && {opacity: 0.5}]}>
+                    <LinearGradient colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]} style={styles.sendGradient}>
+                      <Ionicons name="arrow-up" size={20} color="#FFF" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+
+            {/* ALERT OVERLAY (Modal Yerine Absolute View) */}
+            {showCloseModal && (
+              <View style={styles.alertOverlayAbsolute}>
+                <LinearGradient colors={[COLORS.BG_END, COLORS.BG_START]} style={styles.alertCard}>
+                  <View style={styles.alertIconContainer}>
+                    <Ionicons name="warning" size={32} color={COLORS.DANGER} />
+                  </View>
+                  <Text style={styles.alertTitle}>Sohbeti Kapat</Text>
+                  <Text style={styles.alertMessage}>Sohbet geçmişi temizlensin mi?</Text>
+                  <View style={styles.alertBtnRow}>
+                    <TouchableOpacity style={styles.alertBtnCancel} onPress={() => handleConfirmClose(false)}>
+                      <Text style={styles.alertBtnTextCancel}>Hayır, Sakla</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.alertBtnConfirm} onPress={() => handleConfirmClose(true)}>
+                      <LinearGradient colors={[COLORS.DANGER, '#B91C1C']} style={styles.alertBtnGradient}>
+                        <Text style={styles.alertBtnTextConfirm}>Evet, Temizle</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </LinearGradient>
+              </View>
+            )}
+
+          </LinearGradient>
+        </View>
       </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F9FC' },
-  fab: { position: 'absolute', bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#00BFA6', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 999 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderColor: '#EEE', backgroundColor: '#FFF', alignItems:'center' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  
-  // Balonlar
-  bubble: { padding: 12, borderRadius: 16, maxWidth: '85%' },
-  userBubble: { backgroundColor: '#00BFA6', borderBottomRightRadius: 2 },
-  botBubble: { backgroundColor: '#FFF', borderBottomLeftRadius: 2, borderWidth: 1, borderColor: '#E0E0E0' },
-  userText: { color: '#FFF', fontSize: 15 },
-  botText: { color: '#333', fontSize: 15 },
+  fabWrapper: { position: 'absolute', bottom: 30, right: 20, zIndex: 999 },
+  fabContainer: { alignItems: 'center', justifyContent: 'center' },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', zIndex: 2, elevation: 10, shadowColor: COLORS.ACCENT_START, shadowOpacity: 0.5, shadowRadius: 10 },
+  fabPulse: { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.ACCENT_START, opacity: 0.2, zIndex: 1 },
 
-  // Genel Kart Stili
-  cardContainer: { marginTop: 10, width: '100%' },
-  infoCard: { backgroundColor: 'white', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#EEE', width: 280, elevation: 2, borderLeftWidth: 4 },
+  modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalGradient: { flex: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
+  
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: COLORS.GLASS_BORDER, backgroundColor: 'rgba(0,0,0,0.3)', alignItems:'center', zIndex: 10 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  headerAvatarContainer: { position: 'relative', width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.ACCENT_END, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  headerAvatarGlow: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.ACCENT_START, opacity: 0.6 },
+  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.SUCCESS, borderWidth: 2, borderColor: '#1E293B', zIndex: 3 },
+  headerTitle: { fontSize: 16, fontWeight: '900', color: COLORS.TEXT_MAIN, letterSpacing: 0.5 },
+  headerSubtitle: { fontSize: 12, color: COLORS.ACCENT_START, fontWeight: '600' },
+  closeBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, zIndex: 50 },
+
+  bubble: { padding: 14, borderRadius: 20, maxWidth: '85%' },
+  userBubble: { borderBottomRightRadius: 4 },
+  botBubble: { backgroundColor: COLORS.GLASS_BG, borderWidth: 1, borderColor: COLORS.GLASS_BORDER, borderBottomLeftRadius: 4 },
+  userText: { color: '#FFF', fontSize: 15, fontWeight: '500' },
+  botText: { color: COLORS.TEXT_MAIN, fontSize: 15, lineHeight: 22 },
+
+  typingContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 10, marginLeft: 10 },
+  botAvatarSmall: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.ACCENT_END, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  typingBubble: { flexDirection: 'row', backgroundColor: COLORS.GLASS_BG, padding: 12, borderRadius: 16, borderBottomLeftRadius: 4, gap: 4 },
+  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.TEXT_SEC },
+
+  cardContainer: { marginTop: 8, width: '100%' },
+  infoCard: { padding: 14, borderRadius: 16, marginBottom: 10, borderWidth: 1, width: width * 0.75, borderLeftWidth: 4, backgroundColor: 'rgba(255,255,255,0.03)' },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  cardTitle: { fontWeight: 'bold', fontSize: 15, color: '#333' },
-  cardSubtitle: { fontSize: 13, color: '#666' },
-  cardBodyText: { fontSize: 13, color: '#444', lineHeight: 18 },
-  
-  // Detay Satırları
-  detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  detailText: { fontSize: 12, color: '#555', marginLeft: 6 },
+  iconCircle: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  cardTitle: { fontWeight: 'bold', fontSize: 15, color: COLORS.TEXT_MAIN },
+  cardSubtitle: { fontSize: 12, color: COLORS.TEXT_SEC },
+  cardBodyText: { fontSize: 13, color: COLORS.TEXT_MAIN, opacity: 0.8 },
+  miniBtn: { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 6, alignItems: 'center', borderRadius: 8 },
+  miniBtnText: { color: COLORS.ACCENT_START, fontSize: 12, fontWeight: 'bold' },
 
-  // Açıklama Kutusu (Sarı/Pembe kutular)
-  explanationBox: { backgroundColor: '#FFF3E0', padding: 8, borderRadius: 8, marginTop: 8 },
-  explanationText: { fontSize: 12, color: '#E65100', fontStyle: 'italic' },
+  optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  optionButton: { borderRadius: 20, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: COLORS.GLASS_BORDER, overflow:'hidden' },
+  optionText: { color: COLORS.ACCENT_START, fontSize: 13, fontWeight: '600', paddingHorizontal: 16, paddingVertical: 10 },
 
-  // Rozetler
-  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginTop: 8 },
-  badgeSuccess: { backgroundColor: '#E8F8F5' },
-  badgePending: { backgroundColor: '#FFF3E0' },
-  textSuccess: { color: '#27AE60', fontSize: 11, fontWeight: 'bold' },
-  textPending: { color: '#F39C12', fontSize: 11, fontWeight: 'bold' },
+  inputWrapper: { padding: 15, paddingBottom: Platform.OS === 'ios' ? 25 : 15, backgroundColor: 'rgba(15, 23, 42, 0.98)', borderTopWidth: 1, borderColor: COLORS.GLASS_BORDER },
+  inputContainer: { flexDirection: 'row', backgroundColor: COLORS.GLASS_BORDER, borderRadius: 30, padding: 5, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  input: { flex: 1, paddingHorizontal: 20, color: COLORS.TEXT_MAIN, fontSize: 15, height: 45 },
+  sendButton: { width: 45, height: 45, borderRadius: 23, overflow: 'hidden', marginLeft: 5 },
+  sendGradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Aksiyonlar
-  optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, maxWidth: '90%' },
-  optionButton: { backgroundColor: '#E0F2F1', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: '#B2DFDB' },
-  optionText: { color: '#00796B', fontSize: 13, fontWeight: '600' },
-  actionButton: { marginTop: 12, backgroundColor: '#E0F2F1', padding: 10, borderRadius: 10, alignItems: 'center' },
-  actionButtonText: { color: '#00796B', fontWeight: 'bold', fontSize: 13 },
-
-  // Input
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#EEE', alignItems: 'center' },
-  input: { flex: 1, backgroundColor: '#F0F0F0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, marginRight: 10, color: '#333' },
-  sendButton: { backgroundColor: '#00BFA6', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  // ABSOLUTE ALERT STİLİ
+  alertOverlayAbsolute: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20, zIndex: 9999 },
+  alertCard: { width: '85%', borderRadius: 24, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: COLORS.GLASS_BORDER, shadowColor: COLORS.DANGER, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10 },
+  alertIconContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(239, 68, 68, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' },
+  alertTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.TEXT_MAIN, marginBottom: 8 },
+  alertMessage: { fontSize: 14, color: COLORS.TEXT_SEC, textAlign: 'center', marginBottom: 24 },
+  alertBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  alertBtnCancel: { flex: 1, paddingVertical: 12, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: COLORS.GLASS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  alertBtnTextCancel: { color: COLORS.TEXT_MAIN, fontWeight: '600' },
+  alertBtnConfirm: { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  alertBtnGradient: { paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  alertBtnTextConfirm: { color: '#FFF', fontWeight: 'bold' }
 });
+
+

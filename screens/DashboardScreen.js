@@ -17,74 +17,77 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
-// Geliştirilmiş Renk Paleti
+// --- FUTURE HEALTH PALETİ ---
 const COLORS = {
-  PRIMARY: '#00BFA6',
-  PRIMARY_DARK: '#00A08E',
-  PRIMARY_LIGHT: '#E6F8F5',
-  ACCENT: '#4ECDC4',
-  BACKGROUND: '#F8FAFC',
-  CARD_BG: '#FFFFFF',
-  TEXT_PRIMARY: '#1E293B',
-  TEXT_SECONDARY: '#64748B',
-  TEXT_LIGHT: '#94A3B8',
-  BORDER: '#E2E8F0',
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+  
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+  
+  GLASS_BG: 'rgba(30, 41, 59, 0.6)',
+  GLASS_BORDER: 'rgba(255, 255, 255, 0.1)',
+  
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  
   SUCCESS: '#10B981',
   WARNING: '#F59E0B',
-  SHADOW: '#000000',
+  DANGER: '#EF4444',
+  PURPLE: '#8B5CF6'
 };
 
 /**
- * Stat Card Component - İstatistik kartları için
- */
-const StatCard = ({ icon, value, label, color }) => (
-  <View style={styles.statCard}>
-    <View style={[styles.statIconContainer, { backgroundColor: color + '15' }]}>
-      <Ionicons name={icon} size={24} color={color} />
-    </View>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
-
-/**
- * Geliştirilmiş Dashboard Button Component
+ * Modern Cam Kart Butonu (Dashboard Listesi İçin)
  */
 const DashboardButton = ({ icon, title, subtitle, onPress, badge }) => (
   <TouchableOpacity 
-    style={styles.card} 
+    style={styles.glassCardButton} 
     onPress={onPress}
     activeOpacity={0.7}
   >
-    <View style={styles.cardContent}>
-      <View style={[styles.cardIconContainer, { backgroundColor: COLORS.PRIMARY_LIGHT }]}>
-        <Ionicons name={icon} size={26} color={COLORS.PRIMARY} />
+    <LinearGradient
+      colors={[COLORS.GLASS_BG, 'rgba(15, 23, 42, 0.3)']}
+      style={styles.glassCardInner}
+    >
+      <View style={styles.cardIconBox}>
+        <LinearGradient
+          colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+          style={styles.iconGradientBg}
+          start={{x:0, y:0}} end={{x:1, y:1}}
+        >
+          <Ionicons name={icon} size={22} color="#FFF" />
+        </LinearGradient>
         {badge && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge}</Text>
           </View>
         )}
       </View>
-      <View style={styles.cardTextContainer}>
+      
+      <View style={styles.cardTextArea}>
         <Text style={styles.cardTitle}>{title}</Text>
         <Text style={styles.cardSubtitle}>{subtitle}</Text>
       </View>
-      <View style={styles.cardArrow}>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.TEXT_LIGHT} />
+      
+      <View style={styles.arrowContainer}>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.TEXT_SEC} />
       </View>
-    </View>
+    </LinearGradient>
   </TouchableOpacity>
 );
 
 /**
- * Quick Action Button - Hızlı erişim butonları
+ * Hızlı Erişim Küreleri (Quick Action Orbs)
  */
-const QuickActionButton = ({ icon, label, onPress, color }) => (
-  <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.quickActionIcon, { backgroundColor: color + '15' }]}>
-      <Ionicons name={icon} size={22} color={color} />
+const QuickActionOrb = ({ icon, label, onPress, color }) => (
+  <TouchableOpacity style={styles.orbContainer} onPress={onPress} activeOpacity={0.8}>
+    <View style={[styles.orb, { borderColor: color }]}>
+      {/* İkonun arkasındaki hafif glow */}
+      <View style={[styles.orbGlow, { backgroundColor: color }]} />
+      <Ionicons name={icon} size={24} color="#FFF" style={{ zIndex: 2 }} />
     </View>
-    <Text style={styles.quickActionLabel}>{label}</Text>
+    <Text style={styles.orbLabel}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -94,7 +97,6 @@ const DashboardScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
 
-  // Günün zamanına göre selamlama
   const getGreeting = () => {
     if (currentHour < 12) return 'Günaydın';
     if (currentHour < 18) return 'İyi günler';
@@ -102,26 +104,29 @@ const DashboardScreen = ({ route, navigation }) => {
   };
 
   useLayoutEffect(() => {
+    // Header'ı Dark Mode'a uygun hale getiriyoruz
     navigation.setOptions({ 
       title: clinicName,
       headerStyle: {
-        backgroundColor: COLORS.PRIMARY,
+        backgroundColor: COLORS.BG_START,
         elevation: 0,
         shadowOpacity: 0,
+        borderBottomWidth: 0,
       },
-      headerTintColor: COLORS.CARD_BG,
+      headerTintColor: COLORS.TEXT_MAIN,
       headerTitleStyle: {
         fontWeight: '700',
         fontSize: 18,
+        letterSpacing: 0.5
       },
       headerLeft: () => (
         <TouchableOpacity 
           onPress={() => navigation.goBack()}
-          style={styles.headerButton}
-          activeOpacity={0.7}
+          style={styles.headerBackButton}
         >
-          <Ionicons name="swap-horizontal-outline" size={22} color={COLORS.CARD_BG} />
-          <Text style={styles.headerButtonText}>Değiştir</Text>
+          <View style={styles.headerBackIcon}>
+            <Ionicons name="apps" size={20} color="#FFF" />
+          </View>
         </TouchableOpacity>
       ),
       headerBackVisible: false,
@@ -139,11 +144,10 @@ const DashboardScreen = ({ route, navigation }) => {
             const firstName = fullName.split(' ')[0];
             setPatientName(firstName);
           } else {
-            setPatientName("Değerli Hastamız");
+            setPatientName("Misafir");
           }
         } catch (err) {
-          console.error('Hasta bilgisi alınamadı:', err);
-          setPatientName("Değerli Hastamız");
+          setPatientName("Misafir");
         }
       }
       setLoading(false);
@@ -152,389 +156,271 @@ const DashboardScreen = ({ route, navigation }) => {
     fetchPatientName();
   }, [navigation, clinicId, clinicName]);
 
-  // Navigasyon fonksiyonları
-  const go_RandevuAl = () => {
-    navigation.navigate('DepartmentList', { 
-      clinicId: clinicId, 
-      clinicName: clinicName 
-    });
-  };
-
-  const go_Tedavilerim = () => {
-    navigation.navigate('TreatmentList'); 
-  };
-
-  const go_Recetelerim = () => {
-    navigation.navigate('PrescriptionList', {
-      clinicId: clinicId 
-    }); 
-  };
-
-  const go_GecmisRandevular = () => {
-    navigation.navigate('PastAppointments', {
-      clinicId: clinicId
-    }); 
-  };
+  // --- NAVİGASYON FONKSİYONLARI ---
   
-  const go_Doktorlarim = () => {
-    navigation.navigate('DoctorList', {
-      clinicId: clinicId,
-      departmentName: null 
-    });
-  };
+  // 1. Randevu Al -> Bölüm Seçimi
+  const go_RandevuAl = () => navigation.navigate('DepartmentList', { clinicId, clinicName });
+  
+  // 2. Tedaviler -> Tedavi Listesi
+  const go_Tedavilerim = () => navigation.navigate('TreatmentList'); 
+  
+  // 3. Reçeteler -> Reçete Listesi
+  const go_Recetelerim = () => navigation.navigate('PrescriptionList', { clinicId }); 
+  
+  // 4. Geçmiş -> Geçmiş Randevular
+  const go_GecmisRandevular = () => navigation.navigate('PastAppointments', { clinicId }); 
+  
+  // 🔥 DÜZELTME BURADA: Klinik Kadrosu -> ÖNCE BÖLÜMLER (DepartmentList)
+  // Kullanıcı önce bölüm seçsin, sonra doktorları görsün.
+  const go_Doktorlarim = () => navigation.navigate('DepartmentList', { clinicId, clinicName });
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
-        <Text style={styles.loadingText}>Yükleniyor...</Text>
+      <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+        <ActivityIndicator size="large" color={COLORS.ACCENT_START} />
+        <Text style={{color: COLORS.TEXT_SEC, marginTop: 10}}>Sistem Yükleniyor...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
+      
+      {/* 1. ZEMİN GRADIENT */}
+      <LinearGradient
+        colors={[COLORS.BG_START, COLORS.BG_END]}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      {/* 2. DEKORATİF GLOW */}
+      <View style={styles.glowTopRight} />
+      <View style={styles.glowBottomLeft} />
+
       <ScrollView 
-        style={styles.container}
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
-        bounces={true}
       >
         
-        {/* Hero Section - Gradient Background */}
+        {/* HERO SECTION (Selamlama & CTA) */}
         <View style={styles.heroSection}>
-          <View style={styles.heroContent}>
-            <View style={styles.greetingContainer}>
-              <Text style={styles.greetingText}>{getGreeting()},</Text>
-              <Text style={styles.patientName}>{patientName}</Text>
-            </View>
-            
-            {/* Ana CTA Butonu */}
-            <TouchableOpacity 
-              style={styles.ctaButton} 
-              onPress={go_RandevuAl}
-              activeOpacity={0.9}
-            >
-              <View style={styles.ctaIconContainer}>
-                <Ionicons name="calendar" size={24} color={COLORS.PRIMARY} />
-              </View>
-              <View style={styles.ctaTextContainer}>
-                <Text style={styles.ctaButtonText}>Randevu Al</Text>
-                <Text style={styles.ctaButtonSubtext}>Hemen randevu oluştur</Text>
-              </View>
-              <Ionicons name="arrow-forward" size={22} color={COLORS.PRIMARY} />
-            </TouchableOpacity>
+          <View>
+            <Text style={styles.greetingText}>{getGreeting()},</Text>
+            <Text style={styles.patientName}>{patientName}</Text>
           </View>
+          
+          {/* Ana CTA: Neon Gradient Buton */}
+          <TouchableOpacity 
+            style={styles.ctaWrapper}
+            onPress={go_RandevuAl}
+            activeOpacity={0.9}
+          >
+            <LinearGradient
+              colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
+              start={{x: 0, y: 0}} end={{x: 1, y: 0}}
+              style={styles.ctaGradient}
+            >
+              <View style={styles.ctaContent}>
+                <View>
+                  <Text style={styles.ctaTitle}>YENİ RANDEVU</Text>
+                  <Text style={styles.ctaSub}>Hemen bir uzman bulun</Text>
+                </View>
+                <View style={styles.ctaIconBox}>
+                  <Ionicons name="calendar" size={24} color={COLORS.ACCENT_END} />
+                </View>
+              </View>
+            </LinearGradient>
+            {/* Buton Arkası Glow */}
+            <View style={styles.ctaGlow} />
+          </TouchableOpacity>
         </View>
 
-        {/* Quick Actions - Hızlı Erişim */}
-        <View style={styles.quickActionsContainer}>
-          <QuickActionButton
-            icon="calendar-outline"
-            label="Randevular"
-            color={COLORS.PRIMARY}
+        {/* QUICK ACTIONS (Hızlı Erişim Küreleri) */}
+        <View style={styles.quickActionsRow}>
+          <QuickActionOrb
+            icon="time"
+            label="Geçmiş"
+            color={COLORS.ACCENT_START}
             onPress={go_GecmisRandevular}
           />
-          <QuickActionButton
-            icon="medical-outline"
-            label="Tedaviler"
-            color="#8B5CF6"
+          <QuickActionOrb
+            icon="medical"
+            label="Tedavi"
+            color={COLORS.PURPLE}
             onPress={go_Tedavilerim}
           />
-          <QuickActionButton
-            icon="document-text-outline"
-            label="Reçeteler"
-            color="#F59E0B"
+          <QuickActionOrb
+            icon="document-text"
+            label="Reçete"
+            color={COLORS.WARNING}
             onPress={go_Recetelerim}
           />
-          <QuickActionButton
-            icon="people-outline"
-            label="Doktorlar"
-            color="#EF4444"
+          <QuickActionOrb
+            icon="people"
+            label="Kadro"
+            color={COLORS.DANGER}
             onPress={go_Doktorlarim}
           />
         </View>
 
-        {/* Ana Menü */}
-        <View style={styles.mainContent}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Sağlık Hizmetleri</Text>
-            <Text style={styles.sectionSubtitle}>Size özel işlemleriniz</Text>
-          </View>
+        {/* ANA MENÜ LİSTESİ */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionHeader}>HİZMETLERİMİZ</Text>
           
           <DashboardButton
-            title="Tedavilerim"
-            subtitle="Aktif tedavi ve protokolleriniz"
-            icon="medical"
+            title="Tedavi Protokolleri"
+            subtitle="Aktif tedavilerinizi takip edin"
+            icon="pulse"
             onPress={go_Tedavilerim}
           />
           
           <DashboardButton
-            title="Reçetelerim"
-            subtitle="İlaç ve reçete bilgileriniz"
-            icon="document-text"
+            title="E-Reçeteler"
+            subtitle="İlaç kullanım talimatları"
+            icon="flask"
             onPress={go_Recetelerim}
           />
           
           <DashboardButton
             title="Randevu Geçmişi"
-            subtitle="Tüm randevu kayıtlarınız"
-            icon="time"
+            subtitle="Önceki ziyaret detayları"
+            icon="file-tray-full"
             onPress={go_GecmisRandevular}
           />
 
           <DashboardButton
-            title="Klinik Doktorları"
-            subtitle="Uzman doktorlarımızı inceleyin"
-            icon="people"
+            title="Klinik Kadrosu"
+            subtitle="Uzmanlarımızı ve branşları inceleyin"
+            icon="id-card"
             onPress={go_Doktorlarim}
           />
         </View>
 
-        {/* Alt Boşluk */}
-        <View style={styles.bottomSpacer} />
-
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default DashboardScreen;
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
+  container: { flex: 1, backgroundColor: COLORS.BG_START },
+  scrollView: { flex: 1 },
+
+  // DEKORATİF
+  glowTopRight: {
+    position: 'absolute', top: -100, right: -50,
+    width: 300, height: 300, borderRadius: 150,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.1,
+    transform: [{ scale: 1.2 }]
   },
-  container: {
-    flex: 1,
+  glowBottomLeft: {
+    position: 'absolute', bottom: 0, left: -50,
+    width: 250, height: 250, borderRadius: 125,
+    backgroundColor: COLORS.ACCENT_END, opacity: 0.1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.BACKGROUND,
+
+  // HEADER CUSTOM
+  headerBackButton: {
+    marginLeft: 0,
+    padding: 4,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: COLORS.TEXT_SECONDARY,
-    fontWeight: '500',
+  headerBackIcon: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
   },
-  
-  // Header Button
-  headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  headerButtonText: {
-    color: COLORS.CARD_BG,
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  
-  // Hero Section
+
+  // HERO SECTION
   heroSection: {
-    backgroundColor: COLORS.PRIMARY,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    shadowColor: COLORS.PRIMARY,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  heroContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  greetingContainer: {
-    marginBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    marginBottom: 20,
   },
   greetingText: {
-    fontSize: 20,
-    color: COLORS.CARD_BG + 'CC',
-    fontWeight: '400',
-    marginBottom: 4,
+    fontSize: 16, color: COLORS.ACCENT_START, fontWeight: '600', letterSpacing: 0.5
   },
   patientName: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.CARD_BG,
-    letterSpacing: 0.5,
+    fontSize: 34, color: COLORS.TEXT_MAIN, fontWeight: '800', letterSpacing: 1,
+    textShadowColor: 'rgba(0, 242, 195, 0.2)', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10
   },
-  
-  // CTA Button
-  ctaButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.CARD_BG,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: COLORS.SHADOW,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+
+  // CTA BUTTON (NEON)
+  ctaWrapper: { marginTop: 24, position: 'relative' },
+  ctaGradient: {
+    borderRadius: 20, padding: 20, zIndex: 2,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)'
   },
-  ctaIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: COLORS.PRIMARY_LIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+  ctaContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ctaTitle: { fontSize: 20, fontWeight: '800', color: '#FFF', letterSpacing: 1 },
+  ctaSub: { fontSize: 13, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  ctaIconBox: {
+    width: 48, height: 48, borderRadius: 16, backgroundColor: '#FFF',
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5
   },
-  ctaTextContainer: {
-    flex: 1,
+  ctaGlow: {
+    position: 'absolute', top: 10, left: 15, right: 15, bottom: -10,
+    backgroundColor: COLORS.ACCENT_START, opacity: 0.3, borderRadius: 20, zIndex: 1,
+    transform: [{ scaleY: 0.9 }], blurRadius: 10
   },
-  ctaButtonText: {
-    color: COLORS.TEXT_PRIMARY,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 2,
+
+  // QUICK ACTIONS
+  quickActionsRow: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    paddingHorizontal: 20, marginBottom: 30
   },
-  ctaButtonSubtext: {
-    color: COLORS.TEXT_SECONDARY,
-    fontSize: 13,
-    fontWeight: '400',
+  orbContainer: { alignItems: 'center' },
+  orb: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, position: 'relative', overflow: 'hidden'
   },
-  
-  // Quick Actions
-  quickActionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    backgroundColor: COLORS.CARD_BG,
-    marginHorizontal: 16,
-    marginTop: -16,
-    borderRadius: 16,
-    shadowColor: COLORS.SHADOW,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+  orbGlow: {
+    position: 'absolute', width: 60, height: 60, borderRadius: 30, opacity: 0.2
   },
-  quickAction: {
-    alignItems: 'center',
-    flex: 1,
+  orbLabel: {
+    color: COLORS.TEXT_SEC, fontSize: 12, marginTop: 8, fontWeight: '600'
   },
-  quickActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  quickActionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.TEXT_SECONDARY,
-    textAlign: 'center',
-  },
-  
-  // Main Content
-  mainContent: {
-    paddingHorizontal: 16,
-    marginTop: 24,
-  },
+
+  // LISTE
+  sectionContainer: { paddingHorizontal: 24 },
   sectionHeader: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: COLORS.TEXT_SECONDARY,
-    fontWeight: '400',
+    color: COLORS.TEXT_SEC, fontSize: 12, fontWeight: 'bold',
+    marginBottom: 16, letterSpacing: 1.5, marginLeft: 4
   },
   
-  // Card Component
-  card: {
-    backgroundColor: COLORS.CARD_BG,
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: COLORS.SHADOW,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER,
+  // DASHBOARD BUTTON (GLASS CARD)
+  glassCardButton: { marginBottom: 14, borderRadius: 20, overflow: 'hidden' },
+  glassCardInner: {
+    flexDirection: 'row', alignItems: 'center', padding: 16,
+    borderWidth: 1, borderColor: COLORS.GLASS_BORDER, borderRadius: 20
   },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+  cardIconBox: {
+    width: 50, height: 50, borderRadius: 16,
+    justifyContent: 'center', alignItems: 'center', marginRight: 16,
+    position: 'relative'
   },
-  cardIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-    position: 'relative',
+  iconGradientBg: {
+    width: '100%', height: '100%', borderRadius: 16,
+    justifyContent: 'center', alignItems: 'center', opacity: 0.9
   },
+  cardTextArea: { flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: COLORS.TEXT_MAIN, letterSpacing: 0.5 },
+  cardSubtitle: { fontSize: 13, color: COLORS.TEXT_SEC, marginTop: 3 },
+  arrowContainer: {
+    width: 32, height: 32, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center', alignItems: 'center'
+  },
+  
   badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
+    position: 'absolute', top: -4, right: -4,
+    backgroundColor: COLORS.DANGER, borderRadius: 8,
+    paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.BG_START
   },
-  badgeText: {
-    color: COLORS.CARD_BG,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  cardTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: COLORS.TEXT_SECONDARY,
-    fontWeight: '400',
-    lineHeight: 18,
-  },
-  cardArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: COLORS.BACKGROUND,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  
-  // Bottom Spacer
-  bottomSpacer: {
-    height: 32,
-  },
+  badgeText: { color: '#FFF', fontSize: 9, fontWeight: 'bold' }
 });
