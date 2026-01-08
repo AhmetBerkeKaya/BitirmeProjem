@@ -193,7 +193,6 @@ const MessageContent = ({ text, isUser, type, data, options, onOptionPress }) =>
 
 // --- ANA COMPONENT ---
 export default function ChatWidget({ visible = true }) {
-  // 1. ÖNCE TÜM HOOK'LAR TANIMLANMALI (Sıralama Değişmemeli)
   const [isVisible, setIsVisible] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -216,15 +215,12 @@ export default function ChatWidget({ visible = true }) {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const flatListRef = useRef(null);
 
-  // 2. EFFECT HOOK'U (Bu da render'dan önce olmalı)
   useEffect(() => {
     if(isVisible) setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages, isTyping, isVisible]);
 
-  // 🔥🔥🔥 3. GÜVENLİ EARLY RETURN (Tüm Hook'lardan Sonra) 🔥🔥🔥
   if (!visible) return null;
 
-  // --- Yardımcı Fonksiyonlar ---
   const handleCloseChatRequest = () => {
     setShowCloseModal(true);
   };
@@ -286,36 +282,43 @@ export default function ChatWidget({ visible = true }) {
 
       {/* ANA SOHBET MODALI */}
       <Modal visible={isVisible} animationType="slide" transparent={true} onRequestClose={handleCloseChatRequest}>
-        <View style={styles.modalContainer}>
-          <LinearGradient 
-            colors={[COLORS.BG_START, COLORS.BG_END]} 
-            style={[styles.modalGradient, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}
-          >
-            {/* Header */}
-            <View style={[styles.header, { marginTop: Platform.OS === 'ios' ? 10 : 0 }]}>
-              <View style={styles.headerTitleRow}>
-                <PulsingAvatar />
-                <View style={{marginLeft: 12}}>
-                  <Text style={styles.headerTitle}>RTM ASİSTAN</Text>
-                  <Text style={styles.headerSubtitle}>Çevrimiçi • Yapay Zeka</Text>
+        
+        {/* DÜZELTME: KeyboardAvoidingView'i Modal'ın hemen içine aldık ve flex:1 verdik */}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"} 
+          style={styles.keyboardView}
+          // Klavye açılınca header'ın üstte kalmaması için gerekli olabilecek bir offset (deneme yanılma ile ince ayar gerekebilir)
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0} 
+        >
+          <View style={styles.modalContainer}>
+            <LinearGradient 
+              colors={[COLORS.BG_START, COLORS.BG_END]} 
+              style={[styles.modalGradient, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}
+            >
+              {/* Header */}
+              <View style={[styles.header, { marginTop: Platform.OS === 'ios' ? 10 : 0 }]}>
+                <View style={styles.headerTitleRow}>
+                  <PulsingAvatar />
+                  <View style={{marginLeft: 12}}>
+                    <Text style={styles.headerTitle}>RTM ASİSTAN</Text>
+                    <Text style={styles.headerSubtitle}>Çevrimiçi • Yapay Zeka</Text>
+                  </View>
                 </View>
+                <TouchableOpacity onPress={handleCloseChatRequest} style={styles.closeBtn} activeOpacity={0.7} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+                  <Ionicons name="close" size={24} color={COLORS.TEXT_SEC} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={handleCloseChatRequest} style={styles.closeBtn} activeOpacity={0.7} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-                <Ionicons name="close" size={24} color={COLORS.TEXT_SEC} />
-              </TouchableOpacity>
-            </View>
 
-            {/* Sohbet */}
-            <FlatList
-              ref={flatListRef} data={messages} keyExtractor={item => item.id}
-              renderItem={({ item }) => <AnimatedBubble isUser={item.isUser}><MessageContent {...item} onOptionPress={handleOptionPress} /></AnimatedBubble>}
-              contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={isTyping ? <TypingIndicator /> : null}
-            />
+              {/* Sohbet */}
+              <FlatList
+                ref={flatListRef} data={messages} keyExtractor={item => item.id}
+                renderItem={({ item }) => <AnimatedBubble isUser={item.isUser}><MessageContent {...item} onOptionPress={handleOptionPress} /></AnimatedBubble>}
+                contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+                ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+              />
 
-            {/* Input */}
-            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              {/* Input Alanı */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput 
@@ -329,33 +332,33 @@ export default function ChatWidget({ visible = true }) {
                   </TouchableOpacity>
                 </View>
               </View>
-            </KeyboardAvoidingView>
 
-            {/* ALERT OVERLAY (Modal Yerine Absolute View) */}
-            {showCloseModal && (
-              <View style={styles.alertOverlayAbsolute}>
-                <LinearGradient colors={[COLORS.BG_END, COLORS.BG_START]} style={styles.alertCard}>
-                  <View style={styles.alertIconContainer}>
-                    <Ionicons name="warning" size={32} color={COLORS.DANGER} />
-                  </View>
-                  <Text style={styles.alertTitle}>Sohbeti Kapat</Text>
-                  <Text style={styles.alertMessage}>Sohbet geçmişi temizlensin mi?</Text>
-                  <View style={styles.alertBtnRow}>
-                    <TouchableOpacity style={styles.alertBtnCancel} onPress={() => handleConfirmClose(false)}>
-                      <Text style={styles.alertBtnTextCancel}>Hayır, Sakla</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.alertBtnConfirm} onPress={() => handleConfirmClose(true)}>
-                      <LinearGradient colors={[COLORS.DANGER, '#B91C1C']} style={styles.alertBtnGradient}>
-                        <Text style={styles.alertBtnTextConfirm}>Evet, Temizle</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                </LinearGradient>
-              </View>
-            )}
+              {/* ALERT OVERLAY */}
+              {showCloseModal && (
+                <View style={styles.alertOverlayAbsolute}>
+                  <LinearGradient colors={[COLORS.BG_END, COLORS.BG_START]} style={styles.alertCard}>
+                    <View style={styles.alertIconContainer}>
+                      <Ionicons name="warning" size={32} color={COLORS.DANGER} />
+                    </View>
+                    <Text style={styles.alertTitle}>Sohbeti Kapat</Text>
+                    <Text style={styles.alertMessage}>Sohbet geçmişi temizlensin mi?</Text>
+                    <View style={styles.alertBtnRow}>
+                      <TouchableOpacity style={styles.alertBtnCancel} onPress={() => handleConfirmClose(false)}>
+                        <Text style={styles.alertBtnTextCancel}>Hayır, Sakla</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.alertBtnConfirm} onPress={() => handleConfirmClose(true)}>
+                        <LinearGradient colors={[COLORS.DANGER, '#B91C1C']} style={styles.alertBtnGradient}>
+                          <Text style={styles.alertBtnTextConfirm}>Evet, Temizle</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                  </LinearGradient>
+                </View>
+              )}
 
-          </LinearGradient>
-        </View>
+            </LinearGradient>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -367,6 +370,9 @@ const styles = StyleSheet.create({
   fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', zIndex: 2, elevation: 10, shadowColor: COLORS.ACCENT_START, shadowOpacity: 0.5, shadowRadius: 10 },
   fabPulse: { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.ACCENT_START, opacity: 0.2, zIndex: 1 },
 
+  // DÜZELTME: KeyboardAvoidingView için stil
+  keyboardView: { flex: 1 },
+  
   modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalGradient: { flex: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
   
@@ -424,5 +430,3 @@ const styles = StyleSheet.create({
   alertBtnGradient: { paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   alertBtnTextConfirm: { color: '#FFF', fontWeight: 'bold' }
 });
-
-

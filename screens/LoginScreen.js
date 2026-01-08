@@ -11,7 +11,8 @@ import {
   ScrollView,
   StatusBar,
   Dimensions,
-  Alert
+  Alert,
+  Keyboard // EKLENDİ: Klavye kontrolü için
 } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
@@ -22,18 +23,18 @@ const { width, height } = Dimensions.get('window');
 
 // --- GELECEĞİN SAĞLIĞI PALETİ ---
 const COLORS = {
-  BG_START: '#0F172A', // Derin Lacivert (Neredeyse Siyah)
-  BG_END: '#1E293B',   // Antrasit Gri
-  
-  ACCENT_START: '#00F2C3', // Neon Turkuaz
-  ACCENT_END: '#0063F2',   // Elektrik Mavisi
-  
-  GLASS_BG: 'rgba(30, 41, 59, 0.7)', // Yarı saydam koyu katman
-  INPUT_BG: 'rgba(15, 23, 42, 0.6)', // Input içi daha koyu
-  
-  TEXT_MAIN: '#F1F5F9', // Kirli Beyaz (Göz yormaz)
-  TEXT_SEC: '#94A3B8',  // Soğuk Gri
-  BORDER: 'rgba(148, 163, 184, 0.2)', // Çok silik çerçeve
+  BG_START: '#0F172A',
+  BG_END: '#1E293B',
+
+  ACCENT_START: '#00F2C3',
+  ACCENT_END: '#0063F2',
+
+  GLASS_BG: 'rgba(30, 41, 59, 0.7)',
+  INPUT_BG: 'rgba(15, 23, 42, 0.6)',
+
+  TEXT_MAIN: '#F1F5F9',
+  TEXT_SEC: '#94A3B8',
+  BORDER: 'rgba(148, 163, 184, 0.2)',
   DANGER: '#FF4757',
 };
 
@@ -44,6 +45,9 @@ const LoginScreen = ({ navigation }) => {
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    // DÜZELTME: Giriş butonuna basınca klavyeyi kapat
+    Keyboard.dismiss();
+
     if (email === '' || password === '') {
       setError('E-posta ve şifre gereklidir.');
       return;
@@ -60,33 +64,43 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handlePasswordReset = () => {
+    Keyboard.dismiss(); // Şifre sıfırlarken de klavyeyi kapat
     if (email === '') {
       setError('Sıfırlama linki için e-posta girin.');
       return;
     }
     sendPasswordResetEmail(auth, email)
-      .then(() => Alert.alert('Gönderildi', 'E-postanızı kontrol edin.'))
-      .catch(() => setError('E-posta sistemde bulunamadı.'));
+      .then(() => Alert.alert(
+        'Sıfırlama Bağlantısı Gönderildi',
+        'Lütfen e-posta kutunuzu kontrol edin. Gelen bağlantıya tıklayarak yeni şifrenizi oluşturabilirsiniz. (Spam/Gereksiz kutusunu kontrol etmeyi unutmayın.)',
+        [{ text: 'Tamam' }]
+      )).catch((error) => {
+        // Firebase hata kodlarını daha anlaşılır hale getirebiliriz
+        if (error.code === 'auth/user-not-found') {
+          setError('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.');
+        } else if (error.code === 'auth/invalid-email') {
+          setError('Geçersiz e-posta formatı.');
+        } else {
+          setError('Bir hata oluştu. Lütfen tekrar deneyin.');
+        }
+      });
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.BG_START} />
-      
-      {/* 1. KATMAN: ZEMİN GRADIENT */}
+
       <LinearGradient
         colors={[COLORS.BG_START, COLORS.BG_END]}
         style={styles.backgroundGradient}
       />
 
-      {/* 2. KATMAN: DEKORATİF GLOW (IŞILTI) BLOBLARI */}
       <View style={styles.glowBlobTop} />
       <View style={styles.glowBlobBottom} />
 
-      {/* 3. KATMAN: İÇERİK */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-          
+
           {/* HEADER ALANI */}
           <View style={styles.headerArea}>
             <View style={styles.logoContainer}>
@@ -96,18 +110,16 @@ const LoginScreen = ({ navigation }) => {
               >
                 <Ionicons name="medical" size={42} color="#FFF" />
               </LinearGradient>
-              {/* Logo Arkasındaki Glow */}
               <View style={styles.logoGlow} />
             </View>
-            
+
             <Text style={styles.welcomeTitle}>RTM KLİNİK</Text>
             <Text style={styles.welcomeSub}>Geleceğin Sağlık Teknolojisi</Text>
           </View>
 
           {/* CAM KART (GLASS CARD) */}
           <View style={styles.glassCard}>
-            
-            {/* HATA MESAJI */}
+
             {error ? (
               <View style={styles.errorBox}>
                 <Ionicons name="warning" size={18} color={COLORS.DANGER} />
@@ -119,7 +131,7 @@ const LoginScreen = ({ navigation }) => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>E-POSTA</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail" size={20} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <Ionicons name="mail" size={20} color={COLORS.ACCENT_START} style={{ marginRight: 10 }} />
                 <TextInput
                   style={styles.input}
                   placeholder="ornek@mail.com"
@@ -128,6 +140,7 @@ const LoginScreen = ({ navigation }) => {
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  returnKeyType="next" // Klavyede "İleri" tuşu göster
                 />
               </View>
             </View>
@@ -136,7 +149,7 @@ const LoginScreen = ({ navigation }) => {
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>ŞİFRE</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="key" size={20} color={COLORS.ACCENT_START} style={{marginRight: 10}} />
+                <Ionicons name="key" size={20} color={COLORS.ACCENT_START} style={{ marginRight: 10 }} />
                 <TextInput
                   style={styles.input}
                   placeholder="••••••••"
@@ -144,6 +157,8 @@ const LoginScreen = ({ navigation }) => {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
+                  returnKeyType="go" // Klavyede "Git/Giriş" tuşu göster
+                  onSubmitEditing={handleLogin} // DÜZELTME: Enter'a basınca giriş yap
                 />
               </View>
             </View>
@@ -154,7 +169,7 @@ const LoginScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* GİRİŞ BUTONU */}
-            <TouchableOpacity 
+            <TouchableOpacity
               activeOpacity={0.8}
               onPress={handleLogin}
               disabled={loading}
@@ -162,7 +177,7 @@ const LoginScreen = ({ navigation }) => {
             >
               <LinearGradient
                 colors={[COLORS.ACCENT_START, COLORS.ACCENT_END]}
-                start={{x: 0, y: 0}} end={{x: 1, y: 0}}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.loginBtn}
               >
                 {loading ? (
@@ -171,7 +186,6 @@ const LoginScreen = ({ navigation }) => {
                   <Text style={styles.loginBtnText}>GİRİŞ YAP</Text>
                 )}
               </LinearGradient>
-              {/* Buton Glow Efekti */}
               <View style={styles.btnGlow} />
             </TouchableOpacity>
 
@@ -194,8 +208,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.BG_START },
   backgroundGradient: { ...StyleSheet.absoluteFillObject },
-  
-  // DEKORATİF IŞILTILAR (Glow Blobs)
+
   glowBlobTop: {
     position: 'absolute', top: -100, right: -50,
     width: 300, height: 300, borderRadius: 150,
@@ -211,7 +224,6 @@ const styles = StyleSheet.create({
 
   scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 60 },
 
-  // HEADER
   headerArea: { alignItems: 'center', marginBottom: 40 },
   logoContainer: { position: 'relative', marginBottom: 20 },
   logoGradient: {
@@ -222,15 +234,14 @@ const styles = StyleSheet.create({
   logoGlow: {
     position: 'absolute', top: 10, left: 10, right: 10, bottom: 10,
     backgroundColor: COLORS.ACCENT_START, borderRadius: 30, opacity: 0.6,
-    zIndex: 1, transform: [{ scale: 1.2 }], blurRadius: 20 // Android'de blurRadius çalışmazsa opacity yeterli
+    zIndex: 1, transform: [{ scale: 1.2 }], blurRadius: 20
   },
   welcomeTitle: {
     fontSize: 32, fontWeight: '800', color: COLORS.TEXT_MAIN, letterSpacing: 2,
-    textShadowColor: 'rgba(0, 242, 195, 0.3)', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10
+    textShadowColor: 'rgba(0, 242, 195, 0.3)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10
   },
   welcomeSub: { fontSize: 14, color: COLORS.ACCENT_START, letterSpacing: 1, marginTop: 5, fontWeight: '600', opacity: 0.8 },
 
-  // GLASS CARD
   glassCard: {
     backgroundColor: COLORS.GLASS_BG,
     borderRadius: 24, padding: 24,
@@ -269,7 +280,6 @@ const styles = StyleSheet.create({
   },
   loginBtnText: { color: '#0F172A', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
 
-  // FOOTER
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 40, alignItems: 'center' },
   footerText: { color: COLORS.TEXT_SEC, fontSize: 14 },
   signupText: { color: COLORS.ACCENT_START, fontWeight: 'bold', fontSize: 14 },

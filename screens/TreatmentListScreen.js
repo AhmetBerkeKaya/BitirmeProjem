@@ -114,7 +114,14 @@ const TreatmentListScreen = ({ navigation }) => {
           const protocol = data.selectedProtocol || data.customizedProtocol;
           
           if (protocol && protocol.treatmentSequence) {
-            setProtocolName(protocol.name || 'Özel Protokol');
+            // DÜZELTME: Gelen ismin içindeki "Test" veya "test" kelimesini siliyoruz.
+            // Ayrıca başta veya sonda boşluk kalırsa trim() ile temizliyoruz.
+            let cleanName = (protocol.name || 'Özel Protokol');
+            cleanName = cleanName.replace(/Test\s?/gi, '').trim(); 
+            // Regex açıklaması: /Test\s?/gi -> "Test" kelimesini ve (varsa) yanındaki boşluğu bul. 
+            // 'g' (global) tümünü, 'i' (insensitive) büyük/küçük harf farketmeksizin bulur.
+
+            setProtocolName(cleanName);
             const sequence = protocol.treatmentSequence.sort((a, b) => (a.order || 0) - (b.order || 0));
             setTreatmentSequence(sequence);
           } else {
@@ -159,6 +166,7 @@ const TreatmentListScreen = ({ navigation }) => {
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <Text style={styles.headerLabel}>AKTİF PROTOKOL</Text>
+            {/* Protokol ismi artık temizlenmiş haliyle gösterilecek */}
             <Text style={styles.protocolTitle}>{protocolName}</Text>
           </View>
         }

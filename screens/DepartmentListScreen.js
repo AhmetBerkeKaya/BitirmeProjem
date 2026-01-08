@@ -121,27 +121,6 @@ const DepartmentListScreen = ({ route, navigation }) => {
     });
   };
 
-  /**
-   * Fütüristik Arama Çubuğu
-   */
-  const SearchBar = () => (
-    <View style={styles.searchWrapper}>
-      <Ionicons name="search" size={20} color={COLORS.ACCENT_START} style={styles.searchIcon} />
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Branş ara... (örn: Kardiyoloji)"
-        placeholderTextColor={COLORS.TEXT_SEC}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-      {searchQuery.length > 0 && (
-        <TouchableOpacity onPress={() => setSearchQuery('')}>
-          <Ionicons name="close-circle" size={20} color={COLORS.TEXT_SEC} />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
   // --- RENDER ---
 
   if (loading) {
@@ -200,7 +179,25 @@ const DepartmentListScreen = ({ route, navigation }) => {
             <Text style={styles.deptCount}>{departments.length} Branş Mevcut</Text>
           </View>
 
-          <SearchBar />
+          {/* DÜZELTME: Arama Çubuğu doğrudan JSX içine gömüldü (Bileşen olarak değil) */}
+          <View style={styles.searchWrapper}>
+            <Ionicons name="search" size={20} color={COLORS.ACCENT_START} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Branş ara... (örn: Kardiyoloji)"
+              placeholderTextColor={COLORS.TEXT_SEC}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              // Klavye odaklanma hatasını önlemek için önemli props
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={COLORS.TEXT_SEC} />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {filteredDepartments.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -214,6 +211,9 @@ const DepartmentListScreen = ({ route, navigation }) => {
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContainer}
               showsVerticalScrollIndicator={false}
+              // Klavye açıkken listeyi kaydırınca klavyeyi kapatmak için
+              keyboardShouldPersistTaps="handled" 
+              onScroll={() => {}} // Scroll performans tetikleyicisi
             />
           )}
         </View>
@@ -229,18 +229,15 @@ const styles = StyleSheet.create({
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.BG_START },
   loadingText: { color: COLORS.TEXT_SEC, marginTop: 15 },
 
-  // Dekoratif
   glowTop: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_START, opacity: 0.1, transform: [{ scale: 1.2 }] },
   glowBottom: { position: 'absolute', bottom: -50, left: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: COLORS.ACCENT_END, opacity: 0.1 },
 
   contentContainer: { flex: 1 },
   
-  // Header Info
   headerInfo: { paddingHorizontal: 20, paddingTop: 10, marginBottom: 10 },
   clinicName: { fontSize: 14, color: COLORS.ACCENT_START, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase' },
   deptCount: { fontSize: 24, fontWeight: '800', color: COLORS.TEXT_MAIN, marginTop: 4 },
 
-  // Arama
   searchWrapper: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.INPUT_BG,
     borderRadius: 16, paddingHorizontal: 15, height: 56, borderWidth: 1, borderColor: COLORS.GLASS_BORDER, 
@@ -249,10 +246,8 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: COLORS.TEXT_MAIN, fontSize: 16 },
 
-  // Liste
   listContainer: { paddingBottom: 30 },
 
-  // Cam Kart (Branş)
   cardContainer: { paddingHorizontal: 20, marginBottom: 12 },
   glassCard: {
     flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20,
